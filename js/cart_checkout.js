@@ -234,6 +234,143 @@
         return data;
     }
 
+    function isPaymentEnabledCart(method) {
+        const cfg = (typeof PAYMENT !== 'undefined' && PAYMENT) ? PAYMENT : {};
+        const m = String(method || '').toLowerCase();
+        if (m === 'paystack') return Boolean(cfg.paystackEnabled) && Boolean(cfg.paystackPublicKey);
+        if (m === 'flutterwave') return Boolean(cfg.flutterwaveEnabled) && Boolean(cfg.flutterwavePublicKey);
+        if (m === 'manual') return Boolean(cfg.manualEnabled);
+        return false;
+    }
+
+    function showPaymentOptionsCart(containerId) {
+        const cfg = (typeof PAYMENT !== 'undefined' && PAYMENT) ? PAYMENT : {};
+        const scope = containerId ? document.getElementById(containerId) : document;
+        if (!scope) return;
+        scope.querySelectorAll('[data-payment-opt="flutterwave"]').forEach(function(el) {
+            el.style.display = (cfg.flutterwaveEnabled && cfg.flutterwavePublicKey) ? '' : 'none';
+        });
+    }
+
+    async function openPaystackPaymentCart(payload, totalAmountKobo, customer) {
+        if (typeof PaystackPop === 'undefined') {
+            throw new Error('Paystack SDK not loaded.');
+        }
+        return new Promise(function(resolve, reject) {
+            const handler = PaystackPop.setup({
+                key: PAYMENT.paystackPublicKey,
+                email: customer.email,
+                amount: totalAmountKobo,
+                currency: PAYMENT.currency || 'NGN',
+                ref: payload.order_ref,
+                metadata: {
+                    custom_fields: [
+                        { display_name: 'Customer Name', variable_name: 'customer_name', value: customer.name },
+                        { display_name: 'Phone', variable_name: 'customer_phone', value: customer.phone }
+                    ]
+                },
+                callback: function(response) { resolve({ reference: response.reference, provider: 'paystack' }); },
+                onClose: function() { reject(new Error('paystack_closed')); }
+            });
+            handler.openIframe();
+        });
+    }
+
+    async function openFlutterwavePaymentCart(payload, totalAmount, customer) {
+        if (typeof FlutterwaveCheckout === 'undefined') {
+            throw new Error('Flutterwave SDK not loaded.');
+        }
+        return new Promise(function(resolve, reject) {
+            var closedEarly = true;
+            FlutterwaveCheckout({
+                public_key: PAYMENT.flutterwavePublicKey,
+                tx_ref: payload.order_ref,
+                amount: Number(totalAmount || 0),
+                currency: PAYMENT.currency || 'NGN',
+                country: (typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.country === 'Nigeria') ? 'NG' : (
+                    typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.country === 'Ghana' ? 'GH' :
+                    (typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.country === 'Kenya' ? 'KE' : 'NG')
+                ),
+                payment_options: 'card,banktransfer,ussd,mobilemoney',
+                customer: {
+                    email: customer.email,
+                    name: customer.name,
+                    phone_number: customer.phone
+                },
+                meta: {
+                    customer_name: customer.name,
+                    customer_phone: customer.phone
+                },
+                customizations: {
+                    title: (typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.name) ? BUSINESS.name : 'Payment',
+                    description: 'Cart Payment',
+                    logo: (typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.website) ? (BUSINESS.website.replace(/\/+$/, '') + '/productsimages/logo.jpg') : undefined
+                },
+                callback: function(response) {
+                    closedEarly = false;
+                    var id = response && response.transaction_id ? response.transaction_id : (response && response.data ? response.data.id : '');
+                    var txRef = response && response.tx_ref ? response.tx_ref : (response && response.data ? response.data.tx_ref : payload.order_ref);
+                    resolve({ transaction_id: id, tx_ref: txRef, provider: 'flutterwave' });
+                },
+                onclose: function() {
+                    if (closedEarly) reject(new Error('flutterwave_closed'));
+                }
+            });
+        });
+    }
+
+    async function executeOnlinePaymentCart(method, payload, totalAmount, customer) {
+        const cfg = (typeof PAYMENT !== 'undefined' && PAYMENT) ? PAYMENT : {};
+        if (method === 'paystack') {
+            if (!cfg.paystackEnabled) throw new Error('Paystack is disabled.');
+            if (!cfg.paystackPublicKey) throw new Error('Paystack key not configured.');
+            if (typeof PaystackPop === 'undefined') throw new Error('Paystack SDK not loaded.');
+            trackOrderAttemptCart({
+                order_ref: payload.order_ref,
+                amount: totalAmount,
+                currency: cfg.currency || 'NGN',
+                reason: 'paystack_started',
+                customer: customer
+            });
+            const totalKobo = Math.round(Number(totalAmount || 0) * 100);
+            return openPaystackPaymentCart(payload, totalKobo, customer);
+        }
+        if (method === 'flutterwave') {
+            if (!cfg.flutterwaveEnabled) throw new Error('Flutterwave is disabled.');
+            if (!cfg.flutterwavePublicKey) throw new Error('Flutterwave key not configured.');
+            if (typeof FlutterwaveCheckout === 'undefined') throw new Error('Flutterwave SDK not loaded.');
+            trackOrderAttemptCart({
+                order_ref: payload.order_ref,
+                amount: totalAmount,
+                currency: cfg.currency || 'NGN',
+                reason: 'flutterwave_started',
+                customer: customer
+            });
+            return openFlutterwavePaymentCart(payload, totalAmount, customer);
+        }
+        throw new Error('Unknown online payment method: ' + method);
+    }
+
+    async function trackOrderAttemptCart(data) {
+        try {
+            await fetch(getApiUrl('/api/track-order-attempt'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } catch (error) {}
+    }
+
+    function applyOnlineProviderToPayloadCart(raw) {
+        if (raw && raw.provider && !raw.reference) {
+            if (raw.provider === 'flutterwave') {
+                if (raw.transaction_id) raw.reference = raw.transaction_id;
+                else if (raw.tx_ref) raw.reference = raw.tx_ref;
+            }
+        }
+        return raw;
+    }
+
     function setText(id, value) {
         const el = $(id);
         if (el) el.textContent = value;
@@ -278,6 +415,7 @@
         const form = $('cart-checkout-form');
         if (!form) return;
 
+        showPaymentOptionsCart('cart-payment-methods-container');
         setAddressRequired(cartTotals.hasPhysical);
         toggleManual(false);
         renderManualDetails();
@@ -317,7 +455,10 @@
                 currency: currency,
                 items: cart.map(function(row) {
                     return { productId: row.productId, packageId: row.packageId, qty: row.qty };
-                })
+                }),
+                subtotal: Number(cartTotals.base || 0),
+                shipping_fee: Number(cartTotals.shipping || 0),
+                amount: Number(cartTotals.total || 0)
             };
 
             if (method === 'manual') {
@@ -345,52 +486,38 @@
                 return;
             }
 
-            if (typeof PAYMENT === 'undefined' || !PAYMENT || !PAYMENT.paystackEnabled) {
-                showError('Online payment is disabled.');
-                return;
-            }
-
-            if (!PAYMENT.paystackPublicKey) {
-                showError('Paystack key not configured.');
-                return;
-            }
-
             setSubmitting(true);
-
-            const handler = PaystackPop.setup({
-                key: PAYMENT.paystackPublicKey,
-                email: customer.email,
-                amount: Math.round(Number(cartTotals.total || 0) * 100),
-                currency: PAYMENT.currency || 'NGN',
-                ref: orderRef,
-                metadata: {
-                    custom_fields: [
-                        { display_name: 'Customer Name', variable_name: 'customer_name', value: customer.name },
-                        { display_name: 'Phone', variable_name: 'customer_phone', value: customer.phone }
-                    ]
-                },
-                callback: function(response) {
-                    verifyPayment(Object.assign({}, payload, { reference: response.reference }))
-                        .then(function() {
-                            if (window.PMELAB_CART && typeof window.PMELAB_CART.clear === 'function') {
-                                window.PMELAB_CART.clear();
-                            }
-                            window.location.href = 'success.html?ref=' + encodeURIComponent(response.reference);
-                        })
-                        .catch(function(error) {
-                            window.location.href = 'payment-failed.html?ref=' + encodeURIComponent(response.reference) + '&reason=' + encodeURIComponent(error && error.message ? error.message : 'Payment verification failed');
-                        })
-                        .finally(function() {
-                            setSubmitting(false);
+            executeOnlinePaymentCart(method, payload, cartTotals.total, customer)
+                .then(function(providerResponse) {
+                    const verifyPayload = applyOnlineProviderToPayloadCart(Object.assign({}, payload, providerResponse || {}));
+                    return verifyPayment(verifyPayload).then(function() {
+                        if (window.PMELAB_CART && typeof window.PMELAB_CART.clear === 'function') {
+                            window.PMELAB_CART.clear();
+                        }
+                        const ref = (providerResponse && (providerResponse.reference || providerResponse.tx_ref)) || payload.order_ref;
+                        window.location.href = 'success.html?ref=' + encodeURIComponent(ref);
+                    });
+                })
+                .catch(function(error) {
+                    const message = error && error.message ? String(error.message) : 'Online payment failed.';
+                    if (message === 'paystack_closed' || message === 'flutterwave_closed') {
+                        trackOrderAttemptCart({
+                            order_ref: payload.order_ref,
+                            amount: cartTotals.total,
+                            currency: payload.currency,
+                            reason: message,
+                            customer: customer
                         });
-                },
-                onClose: function() {
-                    setSubmitting(false);
-                    showError('Payment window closed.');
-                }
-            });
-
-            handler.openIframe();
+                        setSubmitting(false);
+                        showError('Payment window closed.');
+                        return;
+                    }
+                    const ref = payload.order_ref;
+                    window.location.href = 'payment-failed.html?ref=' + encodeURIComponent(ref) + '&reason=' + encodeURIComponent(message);
+                })
+                .finally(function() {
+                    if (typeof setSubmitting === 'function') setSubmitting(false);
+                });
         });
     }
 

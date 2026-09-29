@@ -123,6 +123,166 @@
         return '';
     }
 
+    var IMAGE_FIELD_KEYWORDS = [
+        'image', 'images', 'logo', 'socialimage', 'ogimage',
+        'picture', 'pictures', 'photo', 'photos', 'thumbnail',
+        'banner', 'cover', 'icon', 'avatar', 'file', 'gallery'
+    ];
+
+    function isImageFieldKey(key) {
+        var k = String(key || '').toLowerCase().replace(/[_-]/g, '');
+        if (!k) return false;
+        for (var i = 0; i < IMAGE_FIELD_KEYWORDS.length; i++) {
+            if (k.indexOf(IMAGE_FIELD_KEYWORDS[i]) >= 0) return true;
+        }
+        return false;
+    }
+
+    function pathLeafKey(path) {
+        if (!path) return '';
+        var parts = String(path).split('.');
+        return parts[parts.length - 1] || '';
+    }
+
+    async function uploadImageFile(file, configKey, onProgress) {
+        var form = new FormData();
+        form.append('file', file);
+        if (configKey) form.append('configKey', configKey);
+        var token = getAuthToken();
+        var xhr = new XMLHttpRequest();
+        return new Promise(function(resolve, reject) {
+            xhr.open('POST', getApiUrl('/api/owner/upload'), true);
+            if (token) xhr.setRequestHeader('Authorization', 'Basic ' + token);
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable && onProgress) {
+                    onProgress(Math.round((e.loaded / e.total) * 100));
+                }
+            };
+            xhr.onload = function() {
+                var data;
+                try { data = JSON.parse(xhr.responseText || '{}'); }
+                catch (e) { data = {}; }
+                if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+                    resolve(data);
+                } else {
+                    reject(new Error(data.error || ('Upload failed (HTTP ' + xhr.status + ')')));
+                }
+            };
+            xhr.onerror = function() { reject(new Error('Network error during upload')); };
+            xhr.ontimeout = function() { reject(new Error('Upload timed out')); };
+            xhr.timeout = 120000;
+            xhr.send(form);
+        });
+    }
+
+    function updateOwnerFieldStatus(field, statusEl, message, isError) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.style.color = isError ? '#dc2626' : '#16a34a';
+        statusEl.style.fontSize = '0.8rem';
+        statusEl.style.marginTop = '4px';
+    }
+
+    function makeImagePreview(value) {
+        var preview = document.createElement('div');
+        preview.className = 'owner-image-preview';
+        preview.style.marginTop = '8px';
+        preview.style.display = 'none';
+        preview.style.width = '100%';
+        preview.style.maxWidth = '220px';
+        preview.style.height = '140px';
+        preview.style.borderRadius = '10px';
+        preview.style.border = '1px solid var(--border)';
+        preview.style.overflow = 'hidden';
+        preview.style.background = '#f1f5f9';
+        var img = document.createElement('img');
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.display = 'block';
+        img.alt = 'Preview';
+        var setPreviewSrc = function(src) {
+            if (!src) { preview.style.display = 'none'; img.removeAttribute('src'); return; }
+            img.src = src;
+            preview.style.display = 'block';
+        };
+        img.onerror = function() { preview.style.display = 'none'; };
+        preview.appendChild(img);
+        if (value) setPreviewSrc(String(value));
+        return { wrapper: preview, setSrc: setPreviewSrc };
+    }
+
+    function makeUploadControls(input, path) {
+        var wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.flexDirection = 'column';
+        wrap.style.gap = '6px';
+        wrap.style.flex = '1 1 auto';
+
+        var inputRow = document.createElement('div');
+        inputRow.style.display = 'flex';
+        inputRow.style.gap = '8px';
+        inputRow.style.alignItems = 'center';
+        inputRow.appendChild(input);
+
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/bmp';
+        fileInput.style.display = 'none';
+
+        var uploadBtn = document.createElement('button');
+        uploadBtn.type = 'button';
+        uploadBtn.className = 'btn btn-secondary owner-image-upload-btn';
+        uploadBtn.textContent = 'Upload Image';
+        uploadBtn.style.padding = '8px 12px';
+        uploadBtn.style.flexShrink = '0';
+        uploadBtn.style.whiteSpace = 'nowrap';
+
+        var statusEl = document.createElement('div');
+        statusEl.className = 'owner-image-status';
+
+        var preview = makeImagePreview(input.value);
+
+        uploadBtn.addEventListener('click', function() { fileInput.click(); });
+
+        fileInput.addEventListener('change', async function() {
+            var file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            updateOwnerFieldStatus(wrap, statusEl, '', false);
+            try {
+                var result = await uploadImageFile(file, path, function(percent) {
+                    uploadBtn.textContent = 'Uploading ' + percent + '%';
+                });
+                if (result && result.url) {
+                    input.value = String(result.url);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    preview.setSrc(String(result.url));
+                    updateOwnerFieldStatus(wrap, statusEl, 'Uploaded successfully', false);
+                    setTimeout(function() { updateOwnerFieldStatus(wrap, statusEl, '', false); }, 3000);
+                }
+            } catch (error) {
+                updateOwnerFieldStatus(wrap, statusEl, error.message || 'Upload failed', true);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Image';
+                fileInput.value = '';
+            }
+        });
+
+        input.addEventListener('input', function() {
+            preview.setSrc(input.value);
+        });
+
+        inputRow.appendChild(uploadBtn);
+        inputRow.appendChild(fileInput);
+        wrap.appendChild(inputRow);
+        wrap.appendChild(statusEl);
+        wrap.appendChild(preview.wrapper);
+        return wrap;
+    }
+
     function makeInput(label, value, path) {
         var field = document.createElement('label');
         field.className = 'owner-field' + (typeof value === 'boolean' ? ' owner-checkbox-field' : '');
@@ -149,7 +309,17 @@
         input.dataset.configPath = path;
         input.dataset.configType = typeof value;
         field.appendChild(text);
-        field.appendChild(input);
+
+        var isImage = !!(typeof value === 'string' && value !== '' &&
+            /\.(jpg|jpeg|png|webp|gif|svg|avif|bmp)(\?|#|$)/i.test(String(value).trim())) ||
+            isImageFieldKey(label) || isImageFieldKey(pathLeafKey(path));
+
+        if (typeof value !== 'boolean' && typeof value !== 'number' &&
+            !(String(value || '').length > 100 || String(value || '').indexOf('\n') >= 0) && isImage) {
+            field.appendChild(makeUploadControls(input, path));
+        } else {
+            field.appendChild(input);
+        }
         return field;
     }
 

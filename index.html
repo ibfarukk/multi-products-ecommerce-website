@@ -355,6 +355,14 @@
                             </div>
                         </div>
 
+                        <div class="payment-method" data-payment="flutterwave" data-payment-opt="flutterwave" style="display:none;">
+                            <input type="radio" name="payment" value="flutterwave">
+                            <div>
+                                <div class="payment-method-label">Pay Online with Flutterwave</div>
+                                <div class="payment-method-desc">Pay securely with card, bank, mobile money, or USSD</div>
+                            </div>
+                        </div>
+
                         <div class="payment-method" data-payment="manual">
                             <input type="radio" name="payment" value="manual">
                             <div>
@@ -647,6 +655,9 @@
 
     <!-- Paystack Script -->
     <script src="https://js.paystack.co/v1/inline.js"></script>
+
+    <!-- Flutterwave Script -->
+    <script src="https://checkout.flutterwave.com/v3.js"></script>
 
     <!-- Config & Scripts -->
     <script src="js/config.js"></script>

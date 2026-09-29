@@ -19,5 +19,11 @@
     {
       "binding": "OWNER_STATS"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PRODUCT_IMAGES",
+      "bucket_name": "${R2_BUCKET_NAME}"
+    }
   ]
 }

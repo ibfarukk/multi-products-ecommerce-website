@@ -118,10 +118,14 @@
 
                         <div class="form-group" id="checkout-payment-method-group">
                             <label>Payment Method</label>
-                            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <div id="checkout-payment-methods-container" style="display:flex;gap:12px;flex-wrap:wrap;">
                                 <label style="display:flex;gap:8px;align-items:center;">
                                     <input type="radio" name="payment_method" value="paystack" checked>
                                     <span>Paystack</span>
+                                </label>
+                                <label data-payment-opt="flutterwave" style="display:none;gap:8px;align-items:center;">
+                                    <input type="radio" name="payment_method" value="flutterwave">
+                                    <span>Flutterwave</span>
                                 </label>
                                 <label style="display:flex;gap:8px;align-items:center;">
                                     <input type="radio" name="payment_method" value="manual">
@@ -166,6 +170,7 @@
 
     <script src="js/cart.js"></script>
     <script src="https://js.paystack.co/v1/inline.js"></script>
+    <script src="https://checkout.flutterwave.com/v3.js"></script>
     <script src="js/checkout.js"></script>
 </body>
 </html>

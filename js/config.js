@@ -658,6 +658,9 @@ const PAYMENT = {
     manualEnabled: true, // Set to false to hide Manual Bank Transfer
     manualReceiptRequired: true, // Set to false if receipt upload should be optional
     paystackPublicKey: "pk_test_d81cbc3f5d3f34ad13bb5b6626b869bb4545b02a",
+    // Flutterwave
+    flutterwaveEnabled: false, // Set to true to show Flutterwave option
+    flutterwavePublicKey: "", // FLWPUBK_xxxxxxxx
     currency: "NGN"
 };
 

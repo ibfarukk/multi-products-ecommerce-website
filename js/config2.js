@@ -30,6 +30,8 @@ const PAYMENT = {
     manualEnabled: true,
     manualReceiptRequired: true,
     paystackPublicKey: "pk_test_d81cbc3f5d3f34ad13bb5b6626b869bb4545b02a",
+    flutterwaveEnabled: false,
+    flutterwavePublicKey: "",
     currency: "NGN"
 };
 
