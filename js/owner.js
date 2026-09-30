@@ -1004,13 +1004,21 @@
     }
 
     async function syncSiteModeFromSingleConfig() {
+        var cfg;
         try {
-            var cfg = await fetchConfig('singleproduct');
+            cfg = await fetchConfig('singleproduct');
             if (cfg && cfg.WEBSITE_TYPE_SELECT) {
                 activeProductsMode = String(cfg.WEBSITE_TYPE_SELECT);
+                configMode = String(cfg.WEBSITE_TYPE_SELECT);
             }
         } catch (e) {
-            // ignore, use default
+            cfg = null;
+        }
+        // If no KV value yet, fall back to site_selector.js baked-in default (via fetchConfig if available)
+        if (!cfg || !cfg.WEBSITE_TYPE_SELECT) {
+            var detected = (cfg && cfg.WEBSITE_TYPE_SELECT) || activeProductsMode || 'multipleproducts';
+            activeProductsMode = detected;
+            configMode = detected;
         }
         setSiteModeSelectValue(activeProductsMode);
         // Also sync Products tab toolbar dropdown and Settings sub-tabs

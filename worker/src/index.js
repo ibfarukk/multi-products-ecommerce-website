@@ -1271,6 +1271,23 @@ async function handleOwnerConfigSave(request, env) {
     }
 
     await env.OWNER_STATS.put('site-config-' + mode, JSON.stringify(config));
+    // If the saved payload carries a new WEBSITE_TYPE_SELECT, also mirror it into
+    // the other two mode buckets so switching Settings sub-tab cannot silently erase it.
+    const chosen = config && typeof config.WEBSITE_TYPE_SELECT === 'string'
+        ? normalizeSiteMode(config.WEBSITE_TYPE_SELECT)
+        : null;
+    if (chosen) {
+        const otherModes = ['singleproduct', 'multipleproducts', 'affiliate'].filter(function(m) { return m !== mode; });
+        for (const other of otherModes) {
+            try {
+                const existing = await getStoredConfig(env, other);
+                const next = Object.assign({}, existing || {}, { WEBSITE_TYPE_SELECT: chosen });
+                await env.OWNER_STATS.put('site-config-' + other, JSON.stringify(next));
+            } catch (err) {
+                console.error('Failed to mirror WEBSITE_TYPE_SELECT to', other, err && err.message ? err.message : err);
+            }
+        }
+    }
     siteConfigCache = { loadedAt: 0, key: '', value: null, promise: null };
     siteModeCache = { loadedAt: 0, value: 'singleproduct', promise: null };
     return jsonResponse({ success: true, mode: mode, config: config });
@@ -1288,7 +1305,7 @@ async function handlePublicConfigAsset(request, env, path) {
     const response = await env.ASSETS.fetch(request);
     if (!response || !response.ok) return response;
     let text = await response.text();
-    const activeMode = await getStoredSiteMode(env);
+    const activeMode = await getSiteMode(env);
     if (path === '/js/site_selector.js') {
         const source = text.replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
         return new Response(source, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
