@@ -49,6 +49,42 @@
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
+            align-items: center;
+        }
+        .owner-mode-selector {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-mode-selector label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        .owner-mode-selector select {
+            min-width: 180px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #f8fafc;
+            color: var(--text);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .owner-mode-selector .btn {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+        }
+        .owner-mode-selector-status {
+            font-size: 0.78rem;
+            color: var(--muted);
+            min-height: 1rem;
         }
         .owner-grid {
             display: grid;
@@ -483,8 +519,22 @@
                         <p>Private sales and traffic overview. powered by PMELAB TECHNOLOGY LIMITED</p>
                     </div>
                     <div class="owner-actions">
-                        <button id="owner-refresh-btn" class="btn btn-primary" type="button">Refresh</button>
-                        <button id="owner-logout-btn" class="btn btn-secondary" type="button">Logout</button>
+                        <div class="owner-mode-selector" title="Active template served on the storefront">
+                            <label for="owner-site-mode">Store Mode</label>
+                            <select id="owner-site-mode" aria-label="Active website mode">
+                                <option value="singleproduct">Single Product</option>
+                                <option value="multipleproducts">Multiple Products</option>
+                                <option value="affiliate">Affiliate</option>
+                            </select>
+                            <button id="owner-site-mode-save" class="btn btn-primary" type="button">Apply</button>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <div style="display:flex; gap:12px;">
+                                <button id="owner-refresh-btn" class="btn btn-primary" type="button">Refresh</button>
+                                <button id="owner-logout-btn" class="btn btn-secondary" type="button">Logout</button>
+                            </div>
+                            <div id="owner-site-mode-status" class="owner-mode-selector-status">Last saved: --</div>
+                        </div>
                     </div>
                 </div>
 

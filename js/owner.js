@@ -641,6 +641,7 @@
             renderStats(stats);
             setView(true);
             setLoginFieldErrorState(false);
+            await syncSiteModeFromSingleConfig();
             loadConfig(configMode);
         } catch (error) {
             clearAuthToken();
@@ -710,6 +711,7 @@
                 renderStats(stats);
                 setView(true);
                 setLoginFieldErrorState(false);
+                await syncSiteModeFromSingleConfig();
                 loadConfig(configMode);
             } catch (error) {
                 setLoginFieldErrorState(true);
@@ -975,7 +977,6 @@
         } catch (error) {
             console.warn('R2 delete partial failure:', error);
         }
-        configValues = collectConfig();
         if (Array.isArray(configValues.PRODUCTS)) {
             configValues.PRODUCTS.splice(index, 1);
         }
@@ -988,6 +989,102 @@
         } catch (error) {
             setProductsStatus(error.message || 'Unable to delete product', true);
         }
+    }
+
+    function setSiteModeStatus(message, isError) {
+        var el = document.getElementById('owner-site-mode-status');
+        if (!el) return;
+        el.textContent = message || 'Last saved: --';
+        el.style.color = isError ? '#dc2626' : '#475569';
+    }
+
+    function setSiteModeSelectValue(mode) {
+        var el = document.getElementById('owner-site-mode');
+        if (el && mode) el.value = mode;
+    }
+
+    async function syncSiteModeFromSingleConfig() {
+        try {
+            var cfg = await fetchConfig('singleproduct');
+            if (cfg && cfg.WEBSITE_TYPE_SELECT) {
+                activeProductsMode = String(cfg.WEBSITE_TYPE_SELECT);
+            }
+        } catch (e) {
+            // ignore, use default
+        }
+        setSiteModeSelectValue(activeProductsMode);
+        // Also sync Products tab toolbar dropdown and Settings sub-tabs
+        var pm = document.getElementById('owner-products-mode');
+        if (pm) pm.value = activeProductsMode;
+        document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+            tab.classList.toggle('active', tab.dataset.configMode === activeProductsMode);
+        });
+    }
+
+    async function saveSiteMode() {
+        var sel = document.getElementById('owner-site-mode');
+        if (!sel) return;
+        var target = String(sel.value || 'singleproduct').toLowerCase();
+        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') return;
+        setSiteModeStatus('Applying ' + target + '...');
+        try {
+            // 1. Load current singleproduct config
+            var cfg;
+            try { cfg = await fetchConfig('singleproduct'); } catch (e) { cfg = {}; }
+            cfg.WEBSITE_TYPE_SELECT = target;
+            // 2. PUT save under singleproduct (getStoredSiteMode reads it from there)
+            var res = await fetch(getApiUrl('/api/owner/config'), {
+                method: 'PUT',
+                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'singleproduct', config: cfg })
+            });
+            var data = await res.json().catch(function() { return {}; });
+            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to save site mode');
+            // 3. Sync Products & Settings tabs
+            activeProductsMode = target;
+            configMode = target;
+            var pm = document.getElementById('owner-products-mode');
+            if (pm) pm.value = target;
+            document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.configMode === target);
+            });
+            // Refresh currently active tab content
+            if (activeNavTab === 'products') {
+                try {
+                    configValues = await fetchConfig(target);
+                    activeProductsConfig = configValues;
+                    renderProductsList();
+                } catch (e) {
+                    setProductsStatus(e.message || 'Unable to load ' + target, true);
+                }
+            } else if (activeNavTab === 'settings') {
+                try {
+                    configValues = await fetchConfig(target);
+                    configMode = target;
+                    renderConfig();
+                    setConfigStatus('');
+                } catch (e) {
+                    setConfigStatus(e.message || 'Unable to load settings', true);
+                }
+            }
+            // Refresh own stats so cached site mode busts
+            try {
+                var stats = await fetchStats(getAuthToken());
+                renderStats(stats);
+            } catch (e) {}
+            setSiteModeStatus('Saved. Storefront will use ' + target + ' on reload.');
+        } catch (error) {
+            setSiteModeStatus(error.message || 'Unable to apply site mode', true);
+        }
+    }
+
+    function initSiteModeSelector() {
+        var saveBtn = document.getElementById('owner-site-mode-save');
+        var sel = document.getElementById('owner-site-mode');
+        if (sel) {
+            sel.addEventListener('change', function() { setSiteModeStatus('Unsaved changes. Click Apply.'); });
+        }
+        if (saveBtn) saveBtn.addEventListener('click', saveSiteMode);
     }
 
     async function saveConfigRaw(values) {
@@ -1358,8 +1455,7 @@
                 }
             }
 
-            // 2. Sync config
-            configValues = collectConfig();
+            // 2. Sync config (do NOT merge Settings form inputs here)
             if (editorDraft.isSingle) {
                 configValues.PRODUCT = Object.assign({}, (configValues.PRODUCT || {}), {
                     name: title,
@@ -1493,6 +1589,7 @@
         initLookup();
         initActions();
         initConfig();
+        initSiteModeSelector();
         initNavTabs();
         initProductsManagement();
         loadDashboard();

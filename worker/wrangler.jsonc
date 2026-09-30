@@ -9,7 +9,12 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/cdn/*",
+      "/js/config.js",
+      "/js/config2.js",
+      "/js/config3.js",
+      "/js/site_selector.js"
     ]
   },
   "observability": {
