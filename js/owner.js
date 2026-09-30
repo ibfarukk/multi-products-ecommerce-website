@@ -680,8 +680,6 @@
     }
 
     async function loadModeGateOrDefault() {
-        // Reads stored site mode; if nothing valid stored, default to multipleproducts.
-        // Always shows gate first with default pre-selected so owner must Apply before seeing any data.
         var detected = 'multipleproducts';
         try {
             var cfg = await fetchConfig('singleproduct');
@@ -689,14 +687,17 @@
                 var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
                 if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
             }
-        } catch (e) {
-            // ignore, keep default multipleproducts
-        }
+        } catch (e) {}
         activeProductsMode = detected;
         configMode = detected;
         setModeGateCard(detected);
-        setModeGateStatus('Default: Multiple Products. Click Apply & continue to manage this store.');
-        setDashboardSubviews('gate');
+        setSiteModeSelectValue(detected);
+        configValues = await fetchConfig(detected);
+        if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
+        setConfigModeBanner(detected);
+        renderConfig();
+        if (typeof loadProductsManagement === 'function') try { loadProductsManagement(detected); } catch (_e) {}
+        setDashboardSubviews('main');
     }
 
     async function applyModeGate(mode) {
@@ -933,10 +934,18 @@
             ['nav-goto-orders', 'orders'],
             ['nav-goto-products', 'products'],
             ['nav-goto-site-selector', 'site-selector'],
-            ['nav-goto-settings', 'settings']
+            ['nav-goto-settings', 'settings'],
+            ['nav-goto-settings-payments', 'settings', 'MANUAL_PAYMENT'],
+            ['nav-goto-settings-business', 'settings', 'BUSINESS']
         ].forEach(function(pair) {
             var el = document.getElementById(pair[0]);
-            if (el) el.addEventListener('click', function() { switchNavTab(pair[1]); });
+            if (!el) return;
+            el.addEventListener('click', function() {
+                switchNavTab(pair[1]);
+                if (pair[2] && typeof scrollToConfigSection === 'function') {
+                    window.setTimeout(function() { scrollToConfigSection(pair[2]); }, 120);
+                }
+            });
         });
     }
 
@@ -1946,7 +1955,7 @@
         'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
     ];
 
-    function configSectionOrder(key) {
+    function configSectionOrderIndex(key) {
         var i = configSectionOrder.indexOf(key);
         return i < 0 ? (configSectionOrder.length + 1000) : i;
     }
@@ -2049,7 +2058,7 @@
         if (sublist) sublist.innerHTML = '';
 
         var keys = Object.keys(configValues || {}).sort(function(a, b) {
-            return configSectionOrder(a) - configSectionOrder(b) || String(a).localeCompare(String(b));
+            return configSectionOrderIndex(a) - configSectionOrderIndex(b) || String(a).localeCompare(String(b));
         });
 
         keys.forEach(function(key) {
@@ -2391,6 +2400,8 @@
                 if (banner && v) {
                     var label = v === 'singleproduct' ? 'Single Product' : (v === 'affiliate' ? 'Affiliate' : 'Multiple Products');
                     banner.textContent = 'Editing ' + label + ' template settings';
+                    var overviewLabel = document.getElementById('owner-overview-mode-label');
+                    if (overviewLabel) overviewLabel.textContent = label;
                 }
             } catch (_e) {}
         }
