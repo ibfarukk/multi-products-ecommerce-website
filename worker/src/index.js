@@ -108,41 +108,41 @@ export default {
         }
 
         if (request.method === 'GET' && (path === '/' || path === '/index.html')) {
-            const mode = await getSiteMode(env);
-            if (mode === 'multipleproducts') {
-                return Response.redirect('/multiple.html', 302);
-            }
-            if (mode === 'affiliate') {
-                return Response.redirect('/affiliate.html', 302);
-            }
+            try {
+                const mode = await getSiteMode(env);
+                if (mode === 'multipleproducts') return Response.redirect('/multiple.html', 302);
+                if (mode === 'affiliate') return Response.redirect('/affiliate.html', 302);
+            } catch (err) {
+                    // Fall through: serve index.html normally on any error.
+                }
             // singleproduct: serve index.html normally via ASSETS below
         }
 
         if (request.method === 'GET') {
-            const storePages = {
-                '/multiple.html': 'multipleproducts',
-                '/affiliate.html': 'affiliate',
-                '/index.html': 'singleproduct',
-                '/checkout.html': 'singleproduct',
-                '/success.html': null, // allow all
-                '/payment-failed.html': null, // allow all
-                '/cart-checkout.html': 'multipleproducts'
-            };
-            const allowed = storePages[path];
-            if (allowed) {
-                const activeMode = await getSiteMode(env);
-                if (activeMode !== allowed) {
-                    const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
-                    return Response.redirect(target, 302);
+            try {
+                const storePages = {
+                    '/multiple.html': 'multipleproducts',
+                    '/affiliate.html': 'affiliate',
+                    '/index.html': 'singleproduct',
+                    '/checkout.html': 'singleproduct',
+                    '/success.html': null, // allow all
+                    '/payment-failed.html': null, // allow all
+                    '/cart-checkout.html': 'multipleproducts'
+                };
+                const allowed = storePages[path];
+                if (allowed) {
+                    const activeMode = await getSiteMode(env);
+                    if (activeMode !== allowed) {
+                        const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
+                        return Response.redirect(target, 302);
+                    }
+                } else if (path === '/product-details.html') {
+                    const activeMode = await getSiteMode(env);
+                    if (activeMode === 'affiliate') return Response.redirect('/affiliate.html', 302);
+                    if (activeMode === 'singleproduct') return Response.redirect('/index.html', 302);
                 }
-            } else if (path === '/product-details.html') {
-                const activeMode = await getSiteMode(env);
-                if (activeMode === 'affiliate') {
-                    return Response.redirect('/affiliate.html', 302);
-                }
-                if (activeMode === 'singleproduct') {
-                    return Response.redirect('/index.html', 302);
-                }
+            } catch (err) {
+                // On mode enforcement broke: serve whatever the requested ASSETs serve page below fallback serve page normally.
             }
         }
 
@@ -2149,51 +2149,66 @@ async function getSiteConfigForMode(env, mode) {
 async function getSiteMode(env) {
     const ttlMs = 5 * 60 * 1000;
     const now = Date.now();
-    if (siteModeCache.value && now - siteModeCache.loadedAt < ttlMs) {
-        return siteModeCache.value;
-    }
+    try {
+        if (siteModeCache.value && now - siteModeCache.loadedAt < ttlMs) {
+            return siteModeCache.value;
+        }
 
-    if (siteModeCache.promise) {
+        if (siteModeCache.promise) {
+            return siteModeCache.promise;
+        }
+
+        siteModeCache.promise = (async function() {
+            try {
+                const storedMode = await getStoredSiteMode(env);
+                if (storedMode && storedMode !== 'singleproduct') {
+                    siteModeCache.value = storedMode;
+                    siteModeCache.loadedAt = Date.now();
+                    return siteModeCache.value;
+                }
+                if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
+                    siteModeCache.value = 'singleproduct';
+                    siteModeCache.loadedAt = Date.now();
+                    return siteModeCache.value;
+                }
+
+                var response = null;
+                // Try the safest forms supported by Pages ASSETS binding in both
+                // `wrangler pages dev` and deployed Cloudflare Pages runtime.
+                try { response = await env.ASSETS.fetch(new Request('http://localhost/js/site_selector.js')); }
+                catch (e0) { response = null; }
+                if (!response || !response.ok) {
+                    try { response = await env.ASSETS.fetch('https://static.invalid/js/site_selector.js'); }
+                    catch (e1) { response = null; }
+                }
+                if (!response || !response.ok) {
+                    siteModeCache.value = 'singleproduct';
+                    siteModeCache.loadedAt = Date.now();
+                    return siteModeCache.value;
+                }
+
+                var text = '';
+                try { text = await response.text(); } catch (e2) { text = ''; }
+                const cleaned = stripJsComments(text);
+                const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
+                const matches = Array.from(String(cleaned || '').matchAll(regex));
+                const value = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
+                const mode = (value === 'multipleproducts' || value === 'affiliate' || value === 'singleproduct' || value === 'sigleproduct')
+                    ? (value === 'sigleproduct' ? 'singleproduct' : value)
+                    : 'singleproduct';
+
+                siteModeCache.value = mode;
+                siteModeCache.loadedAt = Date.now();
+                return siteModeCache.value;
+            } catch (err) {
+                return 'singleproduct';
+            }
+        })().then(function(v) { siteModeCache.promise = null; return v; }, function(e) { siteModeCache.promise = null; return 'singleproduct'; });
+
         return siteModeCache.promise;
+    } catch (outerErr) {
+        return 'singleproduct';
     }
-
-    siteModeCache.promise = (async function() {
-        const storedMode = await getStoredSiteMode(env);
-        if (storedMode !== 'singleproduct') {
-            siteModeCache.value = storedMode;
-            siteModeCache.loadedAt = Date.now();
-            return siteModeCache.value;
-        }
-        if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
-            siteModeCache.value = 'singleproduct';
-            siteModeCache.loadedAt = Date.now();
-            return siteModeCache.value;
-        }
-
-        const response = await env.ASSETS.fetch(new Request('http://internal/js/site_selector.js'));
-        if (!response || !response.ok) {
-            siteModeCache.value = 'singleproduct';
-            siteModeCache.loadedAt = Date.now();
-            return siteModeCache.value;
-        }
-
-        const text = await response.text();
-        const cleaned = stripJsComments(text);
-        const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
-        const matches = Array.from(String(cleaned || '').matchAll(regex));
-        const value = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
-        const mode = (value === 'multipleproducts' || value === 'affiliate' || value === 'singleproduct' || value === 'sigleproduct')
-            ? (value === 'sigleproduct' ? 'singleproduct' : value)
-            : 'singleproduct';
-
-        siteModeCache.value = mode;
-        siteModeCache.loadedAt = Date.now();
-        return siteModeCache.value;
-    })().finally(function() {
-        siteModeCache.promise = null;
-    });
-
-    return siteModeCache.promise;
 }
 
 async function getEmailContext(env) {
