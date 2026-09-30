@@ -23,7 +23,8 @@
   "r2_buckets": [
     {
       "binding": "PRODUCT_IMAGES",
-      "bucket_name": "${R2_BUCKET_NAME}"
+      "bucket_name": "multi-products-ecommerce-images",
+      "preview_bucket_name": "multi-products-ecommerce-images"
     }
   ]
 }
