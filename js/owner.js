@@ -942,8 +942,11 @@
             if (!el) return;
             el.addEventListener('click', function() {
                 switchNavTab(pair[1]);
-                if (pair[2] && typeof scrollToConfigSection === 'function') {
-                    window.setTimeout(function() { scrollToConfigSection(pair[2]); }, 120);
+                if (pair[2]) {
+                    if (typeof showSingleConfigSection === 'function') showSingleConfigSection(pair[2]);
+                    else if (typeof scrollToConfigSection === 'function') window.setTimeout(function() { scrollToConfigSection(pair[2]); }, 140);
+                } else if (pair[1] === 'settings' && typeof showAllConfigSections === 'function') {
+                    showAllConfigSections();
                 }
             });
         });
@@ -1393,6 +1396,31 @@
         document.querySelectorAll('[data-site-selector-preset]').forEach(function(btn) {
             btn.addEventListener('click', function() { applySiteSelectorPreset(btn.dataset.siteSelectorPreset); });
         });
+        var modeDropdown = document.getElementById('site-selector-mode-dropdown');
+        var modeApplyBtn = document.getElementById('site-selector-apply-mode');
+        function syncModeDropdown() {
+            if (!modeDropdown) return;
+            var sel = document.getElementById('owner-site-mode');
+            if (sel && sel.value) modeDropdown.value = sel.value;
+        }
+        syncModeDropdown();
+        setInterval(syncModeDropdown, 1200);
+        if (modeApplyBtn) {
+            modeApplyBtn.addEventListener('click', async function() {
+                if (!modeDropdown) return;
+                var target = String(modeDropdown.value || 'multipleproducts');
+                setSiteSelectorStatus('Applying ' + target + '...');
+                try {
+                    var ok = await applyModeGate(target);
+                    if (ok) {
+                        setSiteSelectorStatus('Applied ' + target + '. Dashboard filtered immediately.');
+                        window.setTimeout(function() { setSiteSelectorStatus(''); }, 2800);
+                    }
+                } catch (err) {
+                        setSiteSelectorStatus(err && err.message ? err.message : 'Failed to apply mode');
+                    }
+            });
+        }
     }
 
     async function saveConfigRaw(values) {
@@ -2147,12 +2175,8 @@
     }
 
     function scrollToConfigSection(key) {
-        var el = document.getElementById('config-section-' + key);
-        if (!el) return;
-        if (typeof el.scrollIntoView === 'function') {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        highlightSidebarSection(key);
+        if (!key) { showAllConfigSections(); return; }
+        showSingleConfigSection(key);
     }
 
     function highlightSidebarSection(key) {
@@ -2202,6 +2226,60 @@
         window.addEventListener('resize', buildCache, { passive: true });
         window.addEventListener('scroll', onNextFrame, { passive: true });
         onNextFrame();
+    }
+
+    // ===== Single-section settings view (one section at a time) =====
+    var activeConfigSectionKey = null;
+    function showAllConfigSections() {
+        activeConfigSectionKey = null;
+        var host = document.getElementById('owner-config-sections');
+        if (host) host.classList.remove('owner-single-section-view');
+        var sections = document.querySelectorAll('.owner-config-section');
+        sections.forEach(function(s) { s.classList.remove('is-active-section'); });
+        var toolbar = document.getElementById('owner-section-toolbar');
+        if (toolbar) toolbar.style.display = 'none';
+        var nameEl = document.getElementById('owner-section-name');
+        if (nameEl) nameEl.textContent = 'All sections';
+        var intro = document.querySelector('.owner-settings-intro');
+        if (intro) intro.style.display = '';
+        highlightSidebarSection('');
+        if (typeof window.scrollTo === 'function') {
+            var panel = document.getElementById('nav-panel-settings');
+            window.scrollTo({ top: panel ? panel.offsetTop - 24 : 0, behavior: 'smooth' });
+        }
+    }
+    function showSingleConfigSection(key) {
+        if (!key) { showAllConfigSections(); return; }
+        activeConfigSectionKey = key;
+        var host = document.getElementById('owner-config-sections');
+        if (host) host.classList.add('owner-single-section-view');
+        var sections = document.querySelectorAll('.owner-config-section');
+        sections.forEach(function(s) {
+            s.classList.toggle('is-active-section', s.dataset.configSectionKey === key);
+        });
+        var toolbar = document.getElementById('owner-section-toolbar');
+        if (toolbar) toolbar.style.display = 'flex';
+        var nameEl = document.getElementById('owner-section-name');
+        if (nameEl) nameEl.textContent = configTitle(key);
+        var intro = document.querySelector('.owner-settings-intro');
+        if (intro) intro.style.display = 'none';
+        highlightSidebarSection(key);
+        if (typeof window.scrollTo === 'function') {
+            var panel = document.getElementById('nav-panel-settings');
+            window.scrollTo({ top: panel ? panel.offsetTop - 24 : 0, behavior: 'smooth' });
+        }
+    }
+    function initSingleSectionToolbar() {
+        var backBtn = document.getElementById('owner-section-back-all');
+        if (backBtn) backBtn.addEventListener('click', showAllConfigSections);
+        var saveActiveBtn = document.getElementById('owner-section-save-active');
+        if (saveActiveBtn) saveActiveBtn.addEventListener('click', function() {
+            if (activeConfigSectionKey) saveConfig(activeConfigSectionKey);
+        });
+        var reloadActiveBtn = document.getElementById('owner-section-reload-active');
+        if (reloadActiveBtn) reloadActiveBtn.addEventListener('click', function() {
+            if (activeConfigSectionKey) reloadConfigSection(activeConfigSectionKey);
+        });
     }
 
     function reloadConfigSection(sectionKey) {
@@ -2330,8 +2408,8 @@
                 var target = link.dataset.navGoto;
                 switchToMainTab(target);
                 closeSidebarDrawer();
-                if (target === 'settings' && typeof window.scrollTo === 'function') {
-                    window.scrollTo({ top: document.getElementById('nav-panel-settings') ? document.getElementById('nav-panel-settings').offsetTop - 24 : 0, behavior: 'smooth' });
+                if (target === 'settings') {
+                    showAllConfigSections();
                 } else if (typeof window.scrollTo === 'function') {
                     var anchor = document.getElementById('nav-panel-' + target);
                     if (anchor) window.scrollTo({ top: anchor.offsetTop - 24, behavior: 'smooth' });
@@ -2387,6 +2465,7 @@
         initNavTabs();
         initProductsManagement();
         initSiteSelectorEditor();
+        initSingleSectionToolbar();
         // After mode-gate apply, reflect active mode in sidebar footer selector and mobile topbar label
         var origApply = window.__applySiteModeOverride;
         function syncModeLabels() {

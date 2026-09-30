@@ -8,14 +8,310 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/responsive.css">
     <style>
+        :root {
+            --primary: #0f766e;
+            --primary-dark: #115e59;
+            --primary-light: #ccfbf1;
+            --background: #f8fafc;
+            --light-background: #f1f5f9;
+            --text: #0f172a;
+            --muted: #475569;
+            --muted-light: #64748b;
+            --border: #e2e8f0;
+            --border-light: #f1f5f9;
+            --danger: #dc2626;
+            --success: #0f766e;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+            --shadow-md: 0 4px 6px rgba(15, 23, 42, 0.05), 0 2px 4px rgba(15, 23, 42, 0.04);
+            --shadow-lg: 0 10px 25px rgba(15, 23, 42, 0.08), 0 4px 10px rgba(15, 23, 42, 0.04);
+            --radius-sm: 10px;
+            --radius-md: 14px;
+            --radius-lg: 18px;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        }
         body {
-            background: #f8fafc;
+            background: var(--background);
             margin: 0;
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            font-size: 15px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
         html {
             scroll-behavior: smooth;
         }
         *, *::before, *::after { box-sizing: border-box; }
+
+        /* ===== Base buttons ===== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            font: inherit;
+            font-weight: 700;
+            font-size: 0.9rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: transform 0.08s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+            text-decoration: none;
+            white-space: nowrap;
+            user-select: none;
+        }
+        .btn:hover { transform: translateY(-0.5px); }
+        .btn:active { transform: translateY(0); }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 2px 10px color-mix(in srgb, var(--primary) 22%, transparent);
+        }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            border-color: var(--primary-dark);
+            box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 28%, transparent);
+        }
+        .btn-secondary {
+            background: #fff;
+            color: var(--text);
+            border-color: var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+        .btn-secondary:hover {
+            background: var(--light-background);
+            border-color: #cbd5e1;
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--muted);
+            border-color: transparent;
+            box-shadow: none;
+            padding: 8px 10px;
+        }
+        .btn-ghost:hover {
+            background: var(--light-background);
+            color: var(--text);
+        }
+
+        /* ===== Forms ===== */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+        .form-group label {
+            font-size: 0.82rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            color: var(--muted);
+            margin: 0;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        input[type="number"],
+        input[type="tel"],
+        input[type="url"],
+        input[type="date"],
+        input[type="search"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text);
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 500;
+            line-height: 1.4;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+        }
+        textarea { min-height: 96px; resize: vertical; }
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            padding-right: 36px;
+        }
+        input[type="checkbox"], input[type="radio"] {
+            width: auto;
+            margin-right: 8px;
+            accent-color: var(--primary);
+        }
+
+        /* ===== Panels, grids and cards ===== */
+        .owner-panel {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 26px 28px;
+        }
+        .owner-login { max-width: 460px; margin: 48px auto 0; }
+        .owner-title h1 { margin: 0 0 6px; font-size: 1.5rem; line-height: 1.2; }
+        .owner-title p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+        .owner-hidden { display: none !important; }
+        .owner-meta { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+        .owner-error {
+            background: color-mix(in srgb, #dc2626 10%, transparent);
+            color: var(--danger);
+            border: 1px solid color-mix(in srgb, #dc2626 28%, transparent);
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        .owner-note {
+            background: color-mix(in srgb, var(--primary) 7%, transparent);
+            border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+            color: var(--muted);
+            padding: 14px 16px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+        .owner-note strong { color: var(--primary); font-weight: 800; }
+
+        /* ===== Stats grid + owner cards ===== */
+        .owner-grid {
+            max-width: 1180px;
+            margin: 0 auto 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 14px;
+        }
+        .owner-card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
+            padding: 16px 18px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+        .owner-card:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+            border-color: #cbd5e1;
+        }
+        .owner-card-label {
+            font-size: 0.76rem;
+            color: var(--muted);
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .owner-card-value {
+            font-size: 1.55rem;
+            font-weight: 900;
+            line-height: 1.1;
+            color: var(--text);
+            letter-spacing: -0.01em;
+        }
+
+        /* ===== Nav tabs ===== */
+        .owner-nav-tabs {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            padding: 8px;
+            background: var(--light-background);
+            border-bottom: 1px solid var(--border);
+        }
+        .owner-nav-tab {
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            padding: 9px 14px;
+            border-radius: 10px;
+            font: inherit;
+            font-weight: 700;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .owner-nav-tab:hover {
+            background: #fff;
+            color: var(--text);
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-nav-tab.active {
+            background: #fff;
+            color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-nav-panel { display: none; padding: 0; }
+        .owner-nav-panel.active { display: block; animation: panelFade 0.2s ease; }
+        @keyframes panelFade {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Settings single-section active mode ===== */
+        .owner-single-section-view .owner-config-section { display: none !important; }
+        .owner-single-section-view .owner-config-section.is-active-section { display: block !important; animation: panelFade 0.25s ease; }
+        .owner-section-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            padding: 14px 18px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-section-toolbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .owner-section-toolbar-title {
+            font-weight: 900;
+            font-size: 1rem;
+            color: var(--text);
+        }
+        .owner-section-toolbar-title span {
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 0.82rem;
+            margin-left: 6px;
+        }
+        .owner-section-toolbar-right { display: flex; gap: 8px; flex-wrap: wrap; }
+        .owner-section-breadcrumb {
+            font-size: 0.82rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .owner-section-breadcrumb strong { color: var(--primary); }
+
+        /* ===== Misc existing ===== */
+        .owner-form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .owner-form-row .form-group { flex: 1 1 240px; min-width: 0; }
+        .owner-object-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+        .owner-list-item {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            margin: 10px 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-lookup { padding: 0; }
 
         /* ===== Sidebar layout shell ===== */
         .owner-app {
@@ -531,6 +827,116 @@
             cursor: pointer;
         }
         .owner-scroll-top.visible { display: flex; }
+
+        /* ===== Site Selector panel ===== */
+        .site-selector-editor {
+            max-width: 100%;
+        }
+        .site-selector-editor > h3 { margin: 0 0 4px; font-size: 1.1rem; }
+        .site-selector-meta {
+            font-size: 0.88rem;
+            color: var(--muted);
+            line-height: 1.5;
+            font-weight: 500;
+        }
+        .site-selector-mode-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: end;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 16px 18px;
+            margin: 14px 0;
+            box-shadow: var(--shadow-sm);
+        }
+        @media (max-width: 640px) {
+            .site-selector-mode-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        .site-selector-mode-row label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: var(--muted);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .site-selector-presets {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0 18px;
+        }
+        .site-selector-presets button {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 9px 14px;
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        .site-selector-presets button:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-0.5px);
+        }
+        .site-selector-editor textarea {
+            width: 100%;
+            min-height: 220px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.55;
+        }
+        .site-selector-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 14px 0 18px;
+            flex-wrap: wrap;
+        }
+        .site-selector-verify {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: 1.2fr 1fr;
+            align-items: start;
+            padding: 14px 16px;
+            background: var(--light-background);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+        @media (max-width: 640px) {
+            .site-selector-verify { grid-template-columns: 1fr; }
+        }
+        .owner-save-status {
+            font-size: 0.82rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        /* ===== Product editor + misc ===== */
+        .owner-editor-footer {
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            border-top: 1px solid var(--border);
+            padding: 14px 18px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            z-index: 20;
+            box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.04);
+        }
         .owner-scroll-top svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; }
 
         /* Backwards compat: ensure old cards/grid still fit in shell */
@@ -829,7 +1235,7 @@
                                         <div class="owner-contact-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
                                         <div>
                                             <div class="owner-contact-label">WhatsApp (Fastest)</div>
-                                            <div class="owner-contact-value"><a href="https://wa.me/2348037073669" target="_blank" rel="noopener noreferrer">+234 803 707 3669</a></div>
+                                            <div class="owner-contact-value"><a href="https://wa.me/2347040616209" target="_blank" rel="noopener noreferrer">+234 704 061 6209</a></div>
                                         </div>
                                     </div>
 
@@ -837,7 +1243,7 @@
                                         <div class="owner-contact-icon"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
                                         <div>
                                             <div class="owner-contact-label">Email</div>
-                                            <div class="owner-contact-value"><a href="mailto:support@pmelabtech.com">support@pmelabtech.com</a></div>
+                                            <div class="owner-contact-value"><a href="mailto:support@paymelab.com">support@paymelab.com</a></div>
                                         </div>
                                     </div>
 
@@ -853,7 +1259,7 @@
                                         <div class="owner-contact-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
                                         <div>
                                             <div class="owner-contact-label">Website</div>
-                                            <div class="owner-contact-value"><a href="https://pmelabtech.com" target="_blank" rel="noopener noreferrer">pmelabtech.com</a></div>
+                                            <div class="owner-contact-value"><a href="https://paymelab.com" target="_blank" rel="noopener noreferrer">paymelab.com</a></div>
                                         </div>
                                     </div>
 
@@ -909,7 +1315,23 @@
                         <div id="nav-panel-site-selector" class="owner-nav-panel">
                             <div class="site-selector-editor">
                                 <h3 style="margin: 0 0 4px;">Site Selector</h3>
-                                <p class="site-selector-meta" style="margin: 0 0 14px;">Choose which storefront template is shown to customers. Select a quick preset or edit the file directly, then click Save. Changes apply immediately to customers. Source: <span id="site-selector-source" style="color:#0f766e; font-weight:600;">assets</span></p>
+                                <p class="site-selector-meta" style="margin: 0 0 14px;">Choose which storefront template is shown to customers. Select from the dropdown, use a quick preset, or edit the file directly, then click Save. Changes apply immediately to customers. Source: <span id="site-selector-source" style="color:#0f766e; font-weight:600;">assets</span></p>
+
+                                <div class="site-selector-mode-row">
+                                    <div style="min-width:0;">
+                                        <label for="site-selector-mode-dropdown">Active storefront mode</label>
+                                        <select id="site-selector-mode-dropdown" aria-label="Store mode selector">
+                                            <option value="singleproduct">Single Product — focused landing page with pricing packages</option>
+                                            <option value="multipleproducts">Multiple Products — catalog, cart checkout, many products</option>
+                                            <option value="affiliate">Affiliate — gallery showcase linking to external offers</option>
+                                        </select>
+                                        <div class="site-selector-meta" style="margin-top:6px;">Worker-level redirects and settings filtering are applied to this mode immediately after Apply.</div>
+                                    </div>
+                                    <div>
+                                        <button type="button" id="site-selector-apply-mode" class="btn btn-primary">Apply mode</button>
+                                    </div>
+                                </div>
+
                                 <div class="site-selector-presets">
                                     <button type="button" data-site-selector-preset="singleproduct">Apply Single Product mode</button>
                                     <button type="button" data-site-selector-preset="multipleproducts">Apply Multiple Products mode</button>
@@ -935,9 +1357,28 @@
                             <div class="owner-config">
                                 <div class="owner-settings-intro">
                                     <h3>Template settings</h3>
-                                    <p>Edit every setting used by the selected template. Settings are grouped into logical sections below. Each section has its own <strong>Save</strong> and <strong>Reload</strong> buttons so you can make changes section by section without scrolling. Click an item in the left sidebar to jump straight to it.</p>
+                                    <p>Edit every setting used by the selected template. Settings are grouped into logical sections. Each section has its own <strong>Save</strong> and <strong>Reload</strong> buttons. Click any item in the left sidebar to open only that section.</p>
                                     <span class="owner-settings-intro-tag" id="owner-config-mode-banner">Editing Multiple Products template</span>
                                 </div>
+
+                                <div class="owner-section-toolbar" id="owner-section-toolbar" style="display:none;">
+                                    <div class="owner-section-toolbar-left">
+                                        <button type="button" class="btn btn-ghost" id="owner-section-back-all" title="Show all settings sections">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" style="stroke:currentColor;stroke-width:2;fill:none;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                                            All sections
+                                        </button>
+                                        <div class="owner-section-toolbar-title" id="owner-section-active-title">
+                                            <span id="owner-section-breadcrumb" class="owner-section-breadcrumb">
+                                                Settings / <strong id="owner-section-name">All sections</strong>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="owner-section-toolbar-right">
+                                        <button type="button" class="btn btn-secondary" id="owner-section-save-active">Save this section</button>
+                                        <button type="button" class="btn btn-secondary" id="owner-section-reload-active">Reload this section</button>
+                                    </div>
+                                </div>
+
                                 <div id="owner-config-sections"></div>
                                 <div class="owner-config-footer">
                                     <button id="owner-config-save" class="btn btn-primary" type="button">Save all settings</button>
