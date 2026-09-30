@@ -111,8 +111,38 @@ export default {
             });
         }
 
-        if (request.method === 'GET' && (path === '/js/site_selector.js' || path === '/js/config.js' || path === '/js/config2.js' || path === '/js/config3.js')) {
-            return handlePublicConfigAsset(request, env, path);
+        if (request.method === 'GET') {
+            const pathname = new URL(request.url).pathname;
+            // Handle public config assets (robust against query-string suffixes & variants):
+            //   /js/config.js    -> singleproduct
+            //   /js/config2.js   -> multipleproducts
+            //   /js/config3.js   -> affiliate
+            //   /js/site_selector.js -> site selector rewrite
+            if (pathname === '/js/site_selector.js' || /^\/js\/config[23]?\.js(\?|#|$)/.test(pathname + (new URL(request.url).search || ''))) {
+                let assetPath = pathname;
+                if (/^\/js\/config\.js/.test(pathname)) assetPath = '/js/config.js';
+                else if (/^\/js\/config2\.js/.test(pathname)) assetPath = '/js/config2.js';
+                else if (/^\/js\/config3\.js/.test(pathname)) assetPath = '/js/config3.js';
+                return handlePublicConfigAsset(request, env, assetPath);
+            }
+
+            // Normalize clean URLs -> canonical .html variants with temporary redirect.
+            // This ensures mode-enforcement runs consistently & no split CDN caches between clean/html URLs.
+            const cleanMap = {
+                '/multiple': '/multiple.html',
+                '/affiliate': '/affiliate.html',
+                '/checkout': '/checkout.html',
+                '/cart-checkout': '/cart-checkout.html',
+                '/success': '/success.html',
+                '/payment-failed': '/payment-failed.html',
+                '/product-details': '/product-details.html',
+                '/owner': '/owner.html'
+            };
+            const canonical = cleanMap[pathname];
+            if (canonical) {
+                const qs = new URL(request.url).search || '';
+                return Response.redirect(canonical + qs, 302);
+            }
         }
 
         if (request.method === 'GET' && (path === '/' || path === '/index.html')) {
@@ -129,22 +159,29 @@ export default {
         if (request.method === 'GET') {
             try {
                 const storePages = {
+                    // .html variants + clean variants (both normalized above, but kept here for belt-and-suspenders):
                     '/multiple.html': 'multipleproducts',
+                    '/multiple': 'multipleproducts',
                     '/affiliate.html': 'affiliate',
+                    '/affiliate': 'affiliate',
                     '/index.html': 'singleproduct',
                     '/checkout.html': 'singleproduct',
+                    '/checkout': 'singleproduct',
                     '/success.html': null, // allow all
+                    '/success': null,
                     '/payment-failed.html': null, // allow all
-                    '/cart-checkout.html': 'multipleproducts'
+                    '/payment-failed': null,
+                    '/cart-checkout.html': 'multipleproducts',
+                    '/cart-checkout': 'multipleproducts'
                 };
                 const allowed = storePages[path];
-                if (allowed) {
+                if (allowed !== undefined) {
                     const activeMode = await getSiteMode(env);
-                    if (activeMode !== allowed) {
+                    if (typeof allowed === 'string' && activeMode !== allowed) {
                         const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
                         return Response.redirect(target, 302);
                     }
-                } else if (path === '/product-details.html') {
+                } else if (path === '/product-details.html' || path === '/product-details') {
                     const activeMode = await getSiteMode(env);
                     if (activeMode === 'affiliate') return Response.redirect('/affiliate.html', 302);
                     if (activeMode === 'singleproduct') return Response.redirect('/index.html', 302);
