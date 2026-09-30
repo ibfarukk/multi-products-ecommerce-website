@@ -86,6 +86,62 @@
             color: var(--muted);
             min-height: 1rem;
         }
+        .owner-mode-gate {
+            max-width: 620px;
+            margin: 40px auto 0;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            box-shadow: var(--shadow-lg);
+            padding: 28px;
+        }
+        .owner-mode-gate h2 {
+            margin: 0 0 8px;
+            font-size: 1.5rem;
+        }
+        .owner-mode-gate p.lede {
+            margin: 0 0 18px;
+            color: var(--muted);
+        }
+        .owner-mode-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .owner-mode-card {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            cursor: pointer;
+            background: #fff;
+            transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+        }
+        .owner-mode-card:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-mode-card.active {
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+        }
+        .owner-mode-card h3 {
+            margin: 0 0 6px;
+            font-size: 1rem;
+        }
+        .owner-mode-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        .owner-mode-gate-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
         .owner-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -513,7 +569,33 @@
             </div>
 
             <div id="owner-dashboard-view" class="owner-hidden">
-                <div class="owner-header">
+                <div id="owner-mode-gate" class="owner-mode-gate owner-hidden">
+                    <h2>Choose your store mode</h2>
+                    <p class="lede">Select the template you want to manage. Settings, products and stats will only display data for this selection. Defaults to Multiple Products.</p>
+                    <div class="owner-mode-cards">
+                        <div class="owner-mode-card" data-mode-card="multipleproducts">
+                            <h3>Multiple Products</h3>
+                            <p>Catalog view, cart checkout, many products with packages &amp; specs.</p>
+                        </div>
+                        <div class="owner-mode-card" data-mode-card="singleproduct">
+                            <h3>Single Product</h3>
+                            <p>One focused landing page, multiple pricing packages, inline checkout.</p>
+                        </div>
+                        <div class="owner-mode-card" data-mode-card="affiliate">
+                            <h3>Affiliate</h3>
+                            <p>Link out to external offers with a gallery-style showcase.</p>
+                        </div>
+                    </div>
+                    <div class="owner-mode-gate-footer">
+                        <div id="owner-mode-gate-status" style="color:var(--muted); font-size:0.85rem;"></div>
+                        <div style="display:flex; gap:10px;">
+                            <button id="owner-mode-gate-cancel" class="btn btn-secondary" type="button">Logout</button>
+                            <button id="owner-mode-gate-apply" class="btn btn-primary" type="button">Apply &amp; continue</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="owner-main-view">
                     <div class="owner-title">
                         <h1>Owner Dashboard</h1>
                         <p>Private sales and traffic overview. powered by PMELAB TECHNOLOGY LIMITED</p>
@@ -654,6 +736,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     </div>

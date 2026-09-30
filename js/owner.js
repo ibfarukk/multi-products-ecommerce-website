@@ -427,6 +427,7 @@
             configMode = mode;
             if (mode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
             renderConfig();
+            setConfigModeBanner(mode);
             setConfigStatus('');
         } catch (error) {
             setConfigStatus(error.message || 'Unable to load settings', true);
@@ -453,17 +454,31 @@
         }
     }
 
+    function setConfigModeBanner(mode) {
+        var el = document.getElementById('owner-config-mode-banner');
+        if (!el || !mode) return;
+        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : 'Affiliate');
+        el.textContent = 'Editing ' + label + ' template settings only. Change Store Mode above to manage another template.';
+    }
+
     function initConfig() {
+        // Per the mode-gate flow, Settings only shows the currently APPLIED store mode form.
+        // The legacy 3 sub-tab buttons are hidden; prevent their click listeners from swapping.
         document.querySelectorAll('[data-config-mode]').forEach(function(button) {
-            button.addEventListener('click', function() {
-                document.querySelectorAll('[data-config-mode]').forEach(function(tab) { tab.classList.toggle('active', tab === button); });
-                loadConfig(button.dataset.configMode);
+            button.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                // No-op: changing template mode is done exclusively via the header Store Mode dropdown.
+                document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+                    tab.classList.toggle('active', tab.dataset.configMode === configMode);
+                });
             });
         });
         var save = document.getElementById('owner-config-save');
         var reset = document.getElementById('owner-config-reset');
         if (save) save.addEventListener('click', saveConfig);
-        if (reset) reset.addEventListener('click', function() { loadConfig(configMode); });
+        if (reset) reset.addEventListener('click', function() {
+            loadConfig(configMode).then(function() { setConfigModeBanner(configMode); });
+        });
         document.getElementById('owner-config-sections').addEventListener('click', function(event) {
             var addPath = event.target.dataset.addPath;
             var removePath = event.target.dataset.removePath;
@@ -640,21 +655,144 @@
         return data.record;
     }
 
+    function setDashboardSubviews(mode /* 'gate' | 'main' */) {
+        var gate = document.getElementById('owner-mode-gate');
+        var main = document.getElementById('owner-main-view');
+        if (gate) gate.classList.toggle('owner-hidden', mode !== 'gate');
+        if (main) main.classList.toggle('owner-hidden', mode !== 'main');
+    }
+
+    function setModeGateCard(selected) {
+        document.querySelectorAll('[data-mode-card]').forEach(function(card) {
+            card.classList.toggle('active', card.dataset.modeCard === selected);
+        });
+        var sel = document.getElementById('owner-site-mode');
+        if (sel) sel.value = selected;
+        var pm = document.getElementById('owner-products-mode');
+        if (pm) pm.value = selected;
+    }
+
+    function setModeGateStatus(message, isError) {
+        var el = document.getElementById('owner-mode-gate-status');
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isError ? '#dc2626' : '#475569';
+    }
+
+    async function loadModeGateOrDefault() {
+        // Reads stored site mode; if nothing valid stored, default to multipleproducts.
+        // Always shows gate first with default pre-selected so owner must Apply before seeing any data.
+        var detected = 'multipleproducts';
+        try {
+            var cfg = await fetchConfig('singleproduct');
+            if (cfg && cfg.WEBSITE_TYPE_SELECT) {
+                var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
+                if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
+            }
+        } catch (e) {
+            // ignore, keep default multipleproducts
+        }
+        activeProductsMode = detected;
+        configMode = detected;
+        setModeGateCard(detected);
+        setModeGateStatus('Default: Multiple Products. Click Apply & continue to manage this store.');
+        setDashboardSubviews('gate');
+    }
+
+    async function applyModeGate(mode) {
+        var target = String(mode || '').toLowerCase();
+        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
+        setModeGateStatus('Applying ' + target + '...');
+        try {
+            // Persist (mirrored to all 3 KV buckets via worker handleOwnerConfigSave)
+            var cfg;
+            try { cfg = await fetchConfig(target); } catch (e) { cfg = {}; }
+            cfg.WEBSITE_TYPE_SELECT = target;
+            var res = await fetch(getApiUrl('/api/owner/config'), {
+                method: 'PUT',
+                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: target, config: cfg })
+            });
+            var data = await res.json().catch(function() { return {}; });
+            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to apply store mode');
+            // Sync every UI selector
+            activeProductsMode = target;
+            configMode = target;
+            setSiteModeSelectValue(target);
+            setModeGateCard(target);
+            document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+                tab.classList.toggle('active', tab.dataset.configMode === target);
+            });
+            setSiteModeStatus('Applied ' + target + '. All views filtered to this mode.');
+            setModeGateStatus('');
+            // Load filtered content for the chosen mode
+            configValues = await fetchConfig(target);
+            activeProductsConfig = configValues;
+            renderConfig();
+            setConfigStatus('');
+            if (activeNavTab === 'products') renderProductsList();
+            // Refresh stats so dashboard is fresh
+            try {
+                var stats = await fetchStats(getAuthToken());
+                renderStats(stats);
+            } catch (e) {}
+            setDashboardSubviews('main');
+            return true;
+        } catch (error) {
+            setModeGateStatus(error.message || 'Unable to apply store mode', true);
+            return false;
+        }
+    }
+
+    function initModeGate() {
+        document.querySelectorAll('[data-mode-card]').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var mode = card.dataset.modeCard;
+                activeProductsMode = mode;
+                configMode = mode;
+                setModeGateCard(mode);
+                setModeGateStatus('Selected: ' + mode + '. Click Apply & continue.');
+            });
+        });
+        var cancel = document.getElementById('owner-mode-gate-cancel');
+        var apply = document.getElementById('owner-mode-gate-apply');
+        if (cancel) cancel.addEventListener('click', function() { clearAuthToken(); setView(false); });
+        if (apply) apply.addEventListener('click', function() { applyModeGate(activeProductsMode || 'multipleproducts'); });
+        // Keep header Store Mode dropdown in sync with card
+        var sel = document.getElementById('owner-site-mode');
+        if (sel) sel.addEventListener('change', function() {
+            var v = sel.value;
+            activeProductsMode = v;
+            configMode = v;
+            setModeGateCard(v);
+            setModeGateStatus('Selected: ' + v + '. Click Apply & continue.');
+        });
+        // Hide redundant Settings sub-tabs. Only show the selected mode form; enforce via initConfig too.
+        var settingsTabsRow = document.querySelector('.owner-config .owner-tabs');
+        if (settingsTabsRow) {
+            settingsTabsRow.style.display = 'none';
+            var banner = document.createElement('p');
+            banner.className = 'owner-meta';
+            banner.id = 'owner-config-mode-banner';
+            banner.style.margin = '0 0 14px';
+            banner.style.fontWeight = '600';
+            banner.style.color = '#0f766e';
+            settingsTabsRow.parentNode.insertBefore(banner, settingsTabsRow.nextSibling);
+        }
+    }
+
     async function loadDashboard() {
         clearError('owner-dashboard-error');
-        const token = getAuthToken();
+        var token = getAuthToken();
         if (!token) {
             setView(false);
             return;
         }
 
         try {
-            const stats = await fetchStats(token);
-            renderStats(stats);
             setView(true);
             setLoginFieldErrorState(false);
-            await syncSiteModeFromSingleConfig();
-            loadConfig(configMode);
+            await loadModeGateOrDefault();
         } catch (error) {
             clearAuthToken();
             setView(false);
@@ -723,8 +861,7 @@
                 renderStats(stats);
                 setView(true);
                 setLoginFieldErrorState(false);
-                await syncSiteModeFromSingleConfig();
-                loadConfig(configMode);
+                await loadModeGateOrDefault();
             } catch (error) {
                 setLoginFieldErrorState(true);
                 showError('owner-login-error', error.name === 'AbortError'
@@ -1057,57 +1194,12 @@
     async function saveSiteMode() {
         var sel = document.getElementById('owner-site-mode');
         if (!sel) return;
-        var target = String(sel.value || 'singleproduct').toLowerCase();
-        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') return;
+        var target = String(sel.value || 'multipleproducts').toLowerCase();
+        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
         setSiteModeStatus('Applying ' + target + '...');
-        try {
-            // 1. Load current singleproduct config
-            var cfg;
-            try { cfg = await fetchConfig('singleproduct'); } catch (e) { cfg = {}; }
-            cfg.WEBSITE_TYPE_SELECT = target;
-            // 2. PUT save under singleproduct (getStoredSiteMode reads it from there)
-            var res = await fetch(getApiUrl('/api/owner/config'), {
-                method: 'PUT',
-                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: 'singleproduct', config: cfg })
-            });
-            var data = await res.json().catch(function() { return {}; });
-            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to save site mode');
-            // 3. Sync Products & Settings tabs
-            activeProductsMode = target;
-            configMode = target;
-            var pm = document.getElementById('owner-products-mode');
-            if (pm) pm.value = target;
-            document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
-                tab.classList.toggle('active', tab.dataset.configMode === target);
-            });
-            // Refresh currently active tab content
-            if (activeNavTab === 'products') {
-                try {
-                    configValues = await fetchConfig(target);
-                    activeProductsConfig = configValues;
-                    renderProductsList();
-                } catch (e) {
-                    setProductsStatus(e.message || 'Unable to load ' + target, true);
-                }
-            } else if (activeNavTab === 'settings') {
-                try {
-                    configValues = await fetchConfig(target);
-                    configMode = target;
-                    renderConfig();
-                    setConfigStatus('');
-                } catch (e) {
-                    setConfigStatus(e.message || 'Unable to load settings', true);
-                }
-            }
-            // Refresh own stats so cached site mode busts
-            try {
-                var stats = await fetchStats(getAuthToken());
-                renderStats(stats);
-            } catch (e) {}
-            setSiteModeStatus('Saved. Storefront will use ' + target + ' on reload.');
-        } catch (error) {
-            setSiteModeStatus(error.message || 'Unable to apply site mode', true);
+        var ok = await applyModeGate(target);
+        if (!ok) {
+            setSiteModeStatus('Unable to apply ' + target + '. Please try again.', true);
         }
     }
 
@@ -1560,20 +1652,12 @@
         var addBtn = document.getElementById('owner-add-product-btn');
         if (modeSelect) modeSelect.addEventListener('change', async function() {
             var target = String(modeSelect.value || 'multipleproducts');
-            try {
-                configValues = await fetchConfig(target);
-                configMode = target;
-                activeProductsConfig = configValues;
-                activeProductsMode = target;
-                // Sync Settings sub-tab active state
-                document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
-                    tab.classList.toggle('active', tab.dataset.configMode === target);
-                });
-                renderProductsList();
-                setProductsStatus('Switched to ' + target);
-            } catch (error) {
-                setProductsStatus(error.message || 'Unable to switch template', true);
-            }
+            // Mirror to header Store Mode, then persist (reuses applyModeGate)
+            var header = document.getElementById('owner-site-mode');
+            if (header) header.value = target;
+            setProductsStatus('Applying ' + target + '...');
+            var ok = await applyModeGate(target);
+            setProductsStatus(ok ? (target + ' applied.') : 'Unable to apply ' + target, !ok);
         });
         if (addBtn) addBtn.addEventListener('click', function() {
             if (activeProductsMode === 'singleproduct' || activeProductsMode === 'affiliate') return;
@@ -1618,6 +1702,7 @@
         initActions();
         initConfig();
         initSiteModeSelector();
+        initModeGate();
         initNavTabs();
         initProductsManagement();
         loadDashboard();

@@ -2109,7 +2109,12 @@ async function getSiteConfigForMode(env, mode) {
     ];
     names.forEach(function(name) { config[name] = parseJsConst(text, name); });
     const override = await getStoredConfig(env, selectedMode);
-    return Object.assign(config, override || {});
+    const merged = Object.assign(config, override || {});
+    // Always stamp the authoritative active site mode onto every per-mode config view,
+    // so round-tripping GET (owner loads) -> PUT (owner saves) cannot erase it.
+    const activeSiteMode = await getStoredSiteMode(env).catch(function() { return selectedMode; });
+    if (!merged.WEBSITE_TYPE_SELECT) merged.WEBSITE_TYPE_SELECT = activeSiteMode;
+    return merged;
 }
 
 async function getSiteMode(env) {
