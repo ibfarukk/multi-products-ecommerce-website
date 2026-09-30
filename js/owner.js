@@ -48,10 +48,22 @@
     }
 
     function getApiUrl(path) {
-        const cleanPath = path.startsWith('/') ? path : '/' + path;
-        const base = typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).trim() : '';
+        var cleanPath = String(path || '').trim();
+        cleanPath = cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath;
+        var base = '';
+        if (typeof API_BASE_URL !== 'undefined') {
+            base = String(API_BASE_URL || '').trim();
+            if (base === 'null' || base === 'undefined' || base.toLowerCase() === 'null') base = '';
+        }
+        // No base -> resolve relative to the current origin (default Worker origin for pages.dev / workers.dev)
         if (!base) return cleanPath;
-        return base.replace(/\/+$/, '') + cleanPath;
+        // Strip trailing slash and any trailing query/hash noise from the base
+        base = base.replace(/[?#].*$/, '').replace(/\/+$/, '');
+        // If base is just a protocol + nothing, bail to relative
+        if (!base || /^https?:\/?$/i.test(base)) return cleanPath;
+        // Ensure absolute URL: if no scheme but starts with hostname, prepend https://
+        if (!/^https?:\/\//i.test(base)) base = 'https://' + base;
+        return base + cleanPath;
     }
 
     var configMode = 'affiliate';
@@ -868,12 +880,25 @@
         return [];
     }
 
+    function resolveAssetSrc(url) {
+        if (!url) return '';
+        var src = String(url);
+        var isCdn = src.startsWith('/cdn/') || src.startsWith('cdn/');
+        if (!isCdn) return src;
+        var base = '';
+        if (typeof API_BASE_URL !== 'undefined') {
+            base = String(API_BASE_URL || '').trim();
+            if (base === 'null' || base === 'undefined' || base.toLowerCase() === 'null') base = '';
+        }
+        if (!base) return (src.startsWith('/') ? '' : '/') + src;
+        base = base.replace(/[?#].*$/, '').replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(base)) base = 'https://' + base;
+        return base + (src.startsWith('/') ? '' : '/') + src;
+    }
+
     function formatCoverStyle(url) {
         if (!url) return '';
-        var src = url;
-        if (src.startsWith('/cdn/') || src.startsWith('cdn/')) {
-            src = (typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).replace(/\/+$/, '') : '') + (src.startsWith('/') ? '' : '/') + src;
-        }
+        var src = resolveAssetSrc(url);
         return 'background-image:url(\'' + String(src).replace(/'/g, '\\\'') + '\');';
     }
 
@@ -1309,12 +1334,7 @@
             var img = document.createElement('img');
             img.alt = 'Product image ' + (i + 1);
             img.referrerPolicy = 'no-referrer';
-            if (String(url).startsWith('/cdn/') || String(url).startsWith('cdn/')) {
-                var base = typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).replace(/\/+$/, '') : '';
-                img.src = base + (String(url).startsWith('/') ? '' : '/') + String(url);
-            } else {
-                img.src = url;
-            }
+            img.src = resolveAssetSrc(url);
             img.onerror = function() { this.style.opacity = '0.2'; };
 
             var actions = document.createElement('div');
