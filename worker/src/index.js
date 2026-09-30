@@ -115,6 +115,35 @@ export default {
             if (mode === 'affiliate') {
                 return Response.redirect('/affiliate.html', 302);
             }
+            // singleproduct: serve index.html normally via ASSETS below
+        }
+
+        if (request.method === 'GET') {
+            const storePages = {
+                '/multiple.html': 'multipleproducts',
+                '/affiliate.html': 'affiliate',
+                '/index.html': 'singleproduct',
+                '/checkout.html': 'singleproduct',
+                '/success.html': null, // allow all
+                '/payment-failed.html': null, // allow all
+                '/cart-checkout.html': 'multipleproducts'
+            };
+            const allowed = storePages[path];
+            if (allowed) {
+                const activeMode = await getSiteMode(env);
+                if (activeMode !== allowed) {
+                    const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
+                    return Response.redirect(target, 302);
+                }
+            } else if (path === '/product-details.html') {
+                const activeMode = await getSiteMode(env);
+                if (activeMode === 'affiliate') {
+                    return Response.redirect('/affiliate.html', 302);
+                }
+                if (activeMode === 'singleproduct') {
+                    return Response.redirect('/index.html', 302);
+                }
+            }
         }
 
         if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
