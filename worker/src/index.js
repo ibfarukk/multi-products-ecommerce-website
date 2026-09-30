@@ -6,6 +6,7 @@ import { connect } from 'cloudflare:sockets';
 
 export default {
     async fetch(request, env, ctx) {
+        try {
         const url = new URL(request.url);
         const path = url.pathname;
 
@@ -112,36 +113,50 @@ export default {
         }
 
         if (request.method === 'GET') {
-            const pathname = new URL(request.url).pathname;
-            // Handle public config assets (robust against query-string suffixes & variants):
-            //   /js/config.js    -> singleproduct
-            //   /js/config2.js   -> multipleproducts
-            //   /js/config3.js   -> affiliate
-            //   /js/site_selector.js -> site selector rewrite
-            if (pathname === '/js/site_selector.js' || /^\/js\/config[23]?\.js(\?|#|$)/.test(pathname + (new URL(request.url).search || ''))) {
-                let assetPath = pathname;
-                if (/^\/js\/config\.js/.test(pathname)) assetPath = '/js/config.js';
-                else if (/^\/js\/config2\.js/.test(pathname)) assetPath = '/js/config2.js';
-                else if (/^\/js\/config3\.js/.test(pathname)) assetPath = '/js/config3.js';
-                return handlePublicConfigAsset(request, env, assetPath);
-            }
+            try {
+                const pathname = new URL(request.url).pathname;
+                // Handle public config assets (robust against query-string suffixes & variants):
+                //   /js/config.js    -> singleproduct
+                //   /js/config2.js   -> multipleproducts
+                //   /js/config3.js   -> affiliate
+                //   /js/site_selector.js -> site selector rewrite
+                const isConfigJs = pathname === '/js/config.js'
+                    || pathname === '/js/config2.js'
+                    || pathname === '/js/config3.js'
+                    || pathname === '/js/site_selector.js';
+                if (isConfigJs) {
+                    let assetPath = pathname;
+                    if (pathname === '/js/config.js') assetPath = '/js/config.js';
+                    else if (pathname === '/js/config2.js') assetPath = '/js/config2.js';
+                    else if (pathname === '/js/config3.js') assetPath = '/js/config3.js';
+                    try {
+                        return handlePublicConfigAsset(request, env, assetPath);
+                    } catch (hpcaErr) {
+                        // Fall through: serve config JS raw from ASSETS if KV-inject crashes.
+                        // Customer gets static defaults (acceptable worst-case) vs Error 1101.
+                        console.error('handlePublicConfigAsset crashed for', assetPath, hpcaErr && hpcaErr.message ? hpcaErr.message : hpcaErr);
+                    }
+                }
 
-            // Normalize clean URLs -> canonical .html variants with temporary redirect.
-            // This ensures mode-enforcement runs consistently & no split CDN caches between clean/html URLs.
-            const cleanMap = {
-                '/multiple': '/multiple.html',
-                '/affiliate': '/affiliate.html',
-                '/checkout': '/checkout.html',
-                '/cart-checkout': '/cart-checkout.html',
-                '/success': '/success.html',
-                '/payment-failed': '/payment-failed.html',
-                '/product-details': '/product-details.html',
-                '/owner': '/owner.html'
-            };
-            const canonical = cleanMap[pathname];
-            if (canonical) {
-                const qs = new URL(request.url).search || '';
-                return Response.redirect(canonical + qs, 302);
+                // Normalize clean URLs -> canonical .html variants with temporary redirect.
+                // This ensures mode-enforcement runs consistently & no split CDN caches between clean/html URLs.
+                const cleanMap = {
+                    '/multiple': '/multiple.html',
+                    '/affiliate': '/affiliate.html',
+                    '/checkout': '/checkout.html',
+                    '/cart-checkout': '/cart-checkout.html',
+                    '/success': '/success.html',
+                    '/payment-failed': '/payment-failed.html',
+                    '/product-details': '/product-details.html',
+                    '/owner': '/owner.html'
+                };
+                const canonical = cleanMap[pathname];
+                if (canonical) {
+                    const qs = (new URL(request.url).search) || '';
+                    return Response.redirect(canonical + qs, 302);
+                }
+            } catch (routeErr) {
+                console.error('GET pre-route block crashed (safe fallthrough to ASSETS)', routeErr && routeErr.message ? routeErr.message : routeErr);
             }
         }
 
@@ -192,13 +207,32 @@ export default {
         }
 
         if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-            return env.ASSETS.fetch(request);
+            try {
+                return env.ASSETS.fetch(request);
+            } catch (assetsErr) {
+                return new Response(JSON.stringify({ error: 'Service Unavailable', detail: assetsErr && assetsErr.message ? assetsErr.message : 'asset fetch failed' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+                });
+            }
         }
 
         return new Response(JSON.stringify({ error: 'Not Found' }), {
             status: 404,
             headers: corsHeaders
         });
+        } catch (topLevelErr) {
+            // ABSOLUTE LAST RESORT: if any line above threw synchronously,
+            // log it and do a best-effort asset serve to avoid Error 1101.
+            console.error('WORKER TOP-LEVEL CRASH (safe fallback to ASSETS):', topLevelErr && topLevelErr.message ? topLevelErr.message : topLevelErr);
+            try {
+                if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') return env.ASSETS.fetch(request);
+            } catch (_) {}
+            return new Response(JSON.stringify({ error: 'Temporarily Unavailable', detail: topLevelErr && topLevelErr.message ? topLevelErr.message : 'unknown error' }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json; charset=utf-8' }
+            });
+        }
     }
 };
 
@@ -1494,63 +1528,85 @@ function unauthorizedResponse(error) {
 }
 
 async function handlePublicConfigAsset(request, env, path) {
-    if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') return new Response('Not Found', { status: 404 });
-    let text;
-    let sourceAsset;
-    if (path === '/js/site_selector.js') {
-        try {
-            const override = await getStoredSiteSelectorOverride(env);
-            if (typeof override === 'string' && override.length > 0) {
-                text = override;
-                sourceAsset = 'kv';
-            }
-        } catch (e) {
-            text = null;
-        }
-    }
-    if (!text) {
-        const response = await env.ASSETS.fetch(request);
-        if (!response || !response.ok) return response;
-        text = await response.text();
-        sourceAsset = 'assets';
-    }
-    if (path === '/js/site_selector.js') {
-        const activeMode = await getSiteMode(env);
-        const source = String(text || '').replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
-        return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
-    }
-
-    const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
-    const override = await getStoredConfig(env, mode);
-    const contentType = 'application/javascript';
-    const noStoreHeaders = { 'Content-Type': contentType, 'Cache-Control': 'no-store, private, no-cache, must-revalidate' };
-    if (override) {
-        const primitiveNames = ['API_BASE_URL', 'PRODUCT_TYPE'];
-        primitiveNames.forEach(function(key) {
-            if (override[key] === undefined) return;
-            const value = JSON.stringify(override[key]);
-            const pattern = new RegExp('const\\s+' + key + '\\s*=\\s*[^;]+;?', 'i');
-            text = text.replace(pattern, 'const ' + key + ' = ' + value + ';');
-        });
-        const safeNames = [
-            'BUSINESS', 'BRAND', 'PRODUCT', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'FEATURES', 'SPECIFICATIONS', 'PACKAGES',
-            'DELIVERY', 'GUARANTEE', 'WHY_CHOOSE', 'TESTIMONIALS', 'FAQ', 'WHATSAPP_NUMBERS', 'PAYMENT', 'MANUAL_PAYMENT',
-            'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
-            'SOCIAL_PROOF_GALLERY', 'COMPANY', 'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA',
-            'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
-        ];
-        const assignments = Object.keys(override).filter(function(key) {
-            return safeNames.indexOf(key) >= 0;
-        }).map(function(key) {
-            return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
-        }).join('\n');
-        return new Response(text + '\n' + assignments, { headers: noStoreHeaders });
-    }
-    // No override stored yet: return the static content with no-store so subsequent overrides immediately propagate (no stale CDN copies).
     try {
-        return new Response(text, { headers: noStoreHeaders });
-    } catch (e) {
-        return new Response(text, { headers: { 'Content-Type': contentType } });
+        if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') return new Response('Not Found', { status: 404 });
+        let text;
+        let sourceAsset;
+        if (path === '/js/site_selector.js') {
+            try {
+                const override = await getStoredSiteSelectorOverride(env);
+                if (typeof override === 'string' && override.length > 0) {
+                    text = override;
+                    sourceAsset = 'kv';
+                }
+            } catch (e) {
+                text = null;
+            }
+        }
+        if (!text) {
+            try {
+                const response = await env.ASSETS.fetch(request);
+                if (!response || !response.ok) return response;
+                text = await response.text();
+                sourceAsset = 'assets';
+            } catch (assetsErr) {
+                // Worst-case: return empty JS with no-store so browser retries next load.
+                return new Response('// config fetch failed; serving empty placeholder\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store, private, no-cache, must-revalidate' } });
+            }
+        }
+        if (path === '/js/site_selector.js') {
+            let activeMode = 'singleproduct';
+            try { activeMode = await getSiteMode(env); } catch (sm) { activeMode = 'singleproduct'; }
+            const source = String(text || '').replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
+            return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
+        }
+
+        const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
+        let override = null;
+        try { override = await getStoredConfig(env, mode); } catch (sc) { override = null; }
+        const contentType = 'application/javascript';
+        const noStoreHeaders = { 'Content-Type': contentType, 'Cache-Control': 'no-store, private, no-cache, must-revalidate' };
+        if (override) {
+            const primitiveNames = ['API_BASE_URL', 'PRODUCT_TYPE'];
+            primitiveNames.forEach(function(key) {
+                if (override[key] === undefined) return;
+                try {
+                    const value = JSON.stringify(override[key]);
+                    const pattern = new RegExp('const\\s+' + key + '\\s*=\\s*[^;]+;?', 'i');
+                    text = String(text || '').replace(pattern, 'const ' + key + ' = ' + value + ';');
+                } catch (p) {}
+            });
+            const safeNames = [
+                'BUSINESS', 'BRAND', 'PRODUCT', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'FEATURES', 'SPECIFICATIONS', 'PACKAGES',
+                'DELIVERY', 'GUARANTEE', 'WHY_CHOOSE', 'TESTIMONIALS', 'FAQ', 'WHATSAPP_NUMBERS', 'PAYMENT', 'MANUAL_PAYMENT',
+                'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
+                'SOCIAL_PROOF_GALLERY', 'COMPANY', 'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA',
+                'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
+            ];
+            try {
+                const assignments = Object.keys(override).filter(function(key) {
+                    return safeNames.indexOf(key) >= 0;
+                }).map(function(key) {
+                    return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
+                }).join('\n');
+                return new Response(String(text || '') + '\n' + assignments, { headers: noStoreHeaders });
+            } catch (asgErr) {
+                return new Response(text, { headers: noStoreHeaders });
+            }
+        }
+        // No override stored yet: return the static content with no-store so subsequent overrides immediately propagate (no stale CDN copies).
+        try {
+            return new Response(text, { headers: noStoreHeaders });
+        } catch (e) {
+            return new Response(text, { headers: { 'Content-Type': contentType } });
+        }
+    } catch (outerErr) {
+        // Absolute last-resort: serve the raw asset via the binding directly, never throw Error 1101.
+        console.error('handlePublicConfigAsset outer crash for', path, outerErr && outerErr.message ? outerErr.message : outerErr);
+        try {
+            if (env.ASSETS && typeof env.ASSETS.fetch === 'function') return env.ASSETS.fetch(request);
+        } catch (_) {}
+        return new Response('// fatal config-asset error\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
     }
 }
 
@@ -2337,10 +2393,6 @@ async function getStoredSiteMode(env) {
 async function getSiteConfigForMode(env, mode) {
     const selectedMode = normalizeSiteMode(mode);
     const configPath = selectedMode === 'multipleproducts' ? '/js/config2.js' : (selectedMode === 'affiliate' ? '/js/config3.js' : '/js/config.js');
-    if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') return {};
-    const response = await env.ASSETS.fetch(new Request('http://internal' + configPath));
-    if (!response || !response.ok) return {};
-    const text = await response.text();
     const config = {};
     const names = [
         'BUSINESS', 'API_BASE_URL', 'BRAND', 'PRODUCT', 'PRODUCT_TYPE', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS',
@@ -2350,12 +2402,39 @@ async function getSiteConfigForMode(env, mode) {
         'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA', 'STORE_CONTENT', 'PRODUCTS',
         'AFFILIATE_PRODUCTS'
     ];
-    names.forEach(function(name) { config[name] = parseJsConst(text, name); });
-    const override = await getStoredConfig(env, selectedMode);
-    const merged = Object.assign(config, override || {});
-    // Always stamp the authoritative active site mode onto every per-mode config view,
-    // so round-tripping GET (owner loads) -> PUT (owner saves) cannot erase it.
-    const activeSiteMode = await getStoredSiteMode(env).catch(function() { return selectedMode; });
+    names.forEach(function(name) { config[name] = null; });
+
+    if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+        let response = null;
+        // Synthetic hostnames are known to throw in deployed Pages ASSETS binding.
+        // Try multiple call shapes — first the original Request with synthetic hostname,
+        // then fall back to string URL, then fall back to just the path (some Workers runtimes accept that)
+        // then fail open to empty config (override-only rendering) — never throw.
+        const candidates = [
+            function() { return env.ASSETS.fetch(new Request('http://internal' + configPath)); },
+            function() { return env.ASSETS.fetch('http://internal' + configPath); },
+            function() { return env.ASSETS.fetch('https://static.invalid' + configPath); }
+        ];
+        for (let i = 0; i < candidates.length && (!response || !response.ok); i++) {
+            try { response = await candidates[i](); } catch (_e) { response = null; }
+        }
+        if (response && response.ok) {
+            try {
+                const text = await response.text();
+                names.forEach(function(name) {
+                    try {
+                        const parsed = parseJsConst(text, name);
+                        if (parsed !== null && parsed !== undefined) config[name] = parsed;
+                    } catch (_ignore) {}
+                });
+            } catch (_readErr) {}
+        }
+    }
+    let override = null;
+    try { override = await getStoredConfig(env, selectedMode); } catch (_o) { override = null; }
+    const merged = Object.assign({}, config, override || {});
+    let activeSiteMode = selectedMode;
+    try { activeSiteMode = await getStoredSiteMode(env).catch(function() { return selectedMode; }); } catch (_s) { activeSiteMode = selectedMode; }
     if (!merged.WEBSITE_TYPE_SELECT) merged.WEBSITE_TYPE_SELECT = activeSiteMode;
     return merged;
 }
@@ -2500,7 +2579,8 @@ async function getEmailContext(env) {
 async function getSiteConfig(env) {
     const ttlMs = 5 * 60 * 1000;
     const now = Date.now();
-    const mode = await getSiteMode(env);
+    let mode = 'singleproduct';
+    try { mode = await getSiteMode(env); } catch (_m) { mode = 'singleproduct'; }
     const configPath = mode === 'multipleproducts'
         ? '/js/config2.js'
         : (mode === 'affiliate' ? '/js/config3.js' : '/js/config.js');
@@ -2515,35 +2595,40 @@ async function getSiteConfig(env) {
     }
 
     siteConfigCache.promise = (async function() {
-        if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
-            siteConfigCache.value = null;
-            siteConfigCache.key = cacheKey;
-            siteConfigCache.loadedAt = Date.now();
-            return siteConfigCache.value;
-        }
-
-        const response = await env.ASSETS.fetch(new Request('http://internal' + configPath));
-        if (!response || !response.ok) {
-            siteConfigCache.value = null;
-            siteConfigCache.key = cacheKey;
-            siteConfigCache.loadedAt = Date.now();
-            return siteConfigCache.value;
-        }
-
-        const text = await response.text();
-        const site = {
-            BUSINESS: parseJsConst(text, 'BUSINESS'),
-            BRAND: parseJsConst(text, 'BRAND'),
-            PRODUCT: parseJsConst(text, 'PRODUCT'),
-            PACKAGES: parseJsConst(text, 'PACKAGES'),
-            PRODUCTS: parseJsConst(text, 'PRODUCTS'),
-            AFFILIATE_PRODUCTS: parseJsConst(text, 'AFFILIATE_PRODUCTS'),
-            PAYMENT: parseJsConst(text, 'PAYMENT'),
-            MANUAL_PAYMENT: parseJsConst(text, 'MANUAL_PAYMENT')
+        let site = {
+            BUSINESS: null, BRAND: null, PRODUCT: null, PACKAGES: null,
+            PRODUCTS: null, AFFILIATE_PRODUCTS: null, PAYMENT: null, MANUAL_PAYMENT: null
         };
-
-        const override = await getStoredConfig(env, mode);
-        Object.assign(site, override || {});
+        if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+            let response = null;
+            const candidates = [
+                function() { return env.ASSETS.fetch(new Request('http://internal' + configPath)); },
+                function() { return env.ASSETS.fetch('http://internal' + configPath); },
+                function() { return env.ASSETS.fetch('https://static.invalid' + configPath); }
+            ];
+            for (let i = 0; i < candidates.length && (!response || !response.ok); i++) {
+                try { response = await candidates[i](); } catch (_e) { response = null; }
+            }
+            if (response && response.ok) {
+                try {
+                    const text = await response.text();
+                    site = {
+                        BUSINESS: parseJsConst(text, 'BUSINESS'),
+                        BRAND: parseJsConst(text, 'BRAND'),
+                        PRODUCT: parseJsConst(text, 'PRODUCT'),
+                        PACKAGES: parseJsConst(text, 'PACKAGES'),
+                        PRODUCTS: parseJsConst(text, 'PRODUCTS'),
+                        AFFILIATE_PRODUCTS: parseJsConst(text, 'AFFILIATE_PRODUCTS'),
+                        PAYMENT: parseJsConst(text, 'PAYMENT'),
+                        MANUAL_PAYMENT: parseJsConst(text, 'MANUAL_PAYMENT')
+                    };
+                } catch (_readErr) {}
+            }
+        }
+        try {
+            const override = await getStoredConfig(env, mode);
+            Object.assign(site, override || {});
+        } catch (_o) {}
 
         siteConfigCache.value = site;
         siteConfigCache.key = cacheKey;
@@ -2551,6 +2636,11 @@ async function getSiteConfig(env) {
         return siteConfigCache.value;
     })().finally(function() {
         siteConfigCache.promise = null;
+    }).catch(function() {
+        siteConfigCache.value = {};
+        siteConfigCache.key = cacheKey;
+        siteConfigCache.loadedAt = Date.now();
+        return siteConfigCache.value;
     });
 
     return siteConfigCache.promise;
