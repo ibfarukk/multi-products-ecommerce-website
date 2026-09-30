@@ -208,7 +208,15 @@ export default {
 
         if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
             try {
-                return env.ASSETS.fetch(request);
+                let response = await safeAssetsFetch(request, env, path);
+                if (response) return response;
+                // safeAssetsFetch returned null: direct ASSETS fetch last attempt
+                return env.ASSETS.fetch(request).then(function(r) { return withNoStoreCache(r, path); }).catch(function(fallbackErr) {
+                    return new Response(JSON.stringify({ error: 'Service Unavailable', detail: fallbackErr && fallbackErr.message ? fallbackErr.message : 'asset fetch failed' }), {
+                        status: 503,
+                        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+                    });
+                });
             } catch (assetsErr) {
                 return new Response(JSON.stringify({ error: 'Service Unavailable', detail: assetsErr && assetsErr.message ? assetsErr.message : 'asset fetch failed' }), {
                     status: 503,
@@ -226,7 +234,15 @@ export default {
             // log it and do a best-effort asset serve to avoid Error 1101.
             console.error('WORKER TOP-LEVEL CRASH (safe fallback to ASSETS):', topLevelErr && topLevelErr.message ? topLevelErr.message : topLevelErr);
             try {
-                if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') return env.ASSETS.fetch(request);
+                if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+                    try {
+                        const urlObj = new URL(request.url);
+                        const p = urlObj.pathname;
+                        let fallback = await safeAssetsFetch(request, env, p);
+                        if (fallback) return fallback;
+                    } catch (_fb) {}
+                    return env.ASSETS.fetch(request);
+                }
             } catch (_) {}
             return new Response(JSON.stringify({ error: 'Temporarily Unavailable', detail: topLevelErr && topLevelErr.message ? topLevelErr.message : 'unknown error' }), {
                 status: 503,
@@ -3540,6 +3556,76 @@ function jsonResponse(data, status = 200) {
             'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         }
     });
+}
+
+function shouldBustBrowserCache(pathname, contentType) {
+    const cleanPath = String(pathname || '').split('?')[0].split('#')[0];
+    if (!cleanPath || cleanPath === '/') return true;
+    const lower = cleanPath.toLowerCase();
+    if (lower.endsWith('.html')) return true;
+    if (lower.endsWith('.htm')) return true;
+    if (lower.startsWith('/js/') && lower.endsWith('.js')) return true;
+    if (lower.startsWith('/css/') && lower.endsWith('.css')) return true;
+    // Clean storefront URLs (no extension):
+    const cleanStoreUrls = ['/multiple', '/affiliate', '/checkout', '/cart-checkout', '/success', '/payment-failed', '/product-details', '/owner'];
+    if (cleanStoreUrls.indexOf(lower) >= 0) return true;
+    // Fallback: inspect Content-Type when path extension is missing
+    const ct = String(contentType || '').toLowerCase();
+    if (ct.indexOf('text/html') >= 0) return true;
+    if (ct.indexOf('javascript') >= 0 || ct.indexOf('application/js') >= 0) return true;
+    if (ct.indexOf('css') >= 0) return true;
+    return false;
+}
+
+function withNoStoreCache(response, pathname) {
+    if (!response) return response;
+    try {
+        const status = response.status;
+        const url = response.url || '';
+        const ctHdr = response.headers ? response.headers.get('Content-Type') : '';
+        if (!shouldBustBrowserCache(pathname || '', ctHdr)) {
+            return response;
+        }
+        // Preserve existing headers but stamp over cache directives.
+        // Also disable Vary splitting issues & declare Expires 0 for legacy clients.
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0, s-maxage=0, proxy-revalidate, immutable=false');
+        newHeaders.set('Pragma', 'no-cache');
+        newHeaders.set('Expires', '0');
+        newHeaders.set('Clear-Site-Data', '"cache", "executionContexts"');
+        // If original response didn't declare a charset, add one for HTML/JS to prevent edge misrenders
+        const existingCT = newHeaders.get('Content-Type') || ctHdr || '';
+        if (existingCT && existingCT.indexOf('text/html') >= 0 && existingCT.indexOf('charset') < 0) {
+            newHeaders.set('Content-Type', existingCT + '; charset=utf-8');
+        }
+        if (existingCT && existingCT.indexOf('javascript') >= 0 && existingCT.indexOf('charset') < 0) {
+            newHeaders.set('Content-Type', 'application/javascript; charset=utf-8');
+        }
+        return new Response(response.body, { status: status, headers: newHeaders });
+    } catch (wrapErr) {
+        console.error('withNoStoreCache wrap failed for', pathname, wrapErr && wrapErr.message ? wrapErr.message : wrapErr);
+        return response;
+    }
+}
+
+async function safeAssetsFetch(requestOrUrl, env, pathname) {
+    if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== 'function') return null;
+    let response = null;
+    try {
+        response = await env.ASSETS.fetch(requestOrUrl);
+    } catch (err1) {
+        try {
+            if (typeof requestOrUrl === 'string') {
+                response = await env.ASSETS.fetch(new Request(requestOrUrl));
+            } else if (requestOrUrl && typeof requestOrUrl.url === 'string') {
+                response = await env.ASSETS.fetch(requestOrUrl.url);
+            }
+        } catch (err2) {
+            response = null;
+        }
+    }
+    if (!response) return null;
+    return withNoStoreCache(response, pathname || '');
 }
 
 // =========================================================
