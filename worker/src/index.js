@@ -77,6 +77,11 @@ export default {
             return handleOwnerImageUpload(request, env);
         }
 
+        // Owner image delete from R2
+        if (path === '/api/owner/upload' && request.method === 'DELETE') {
+            return handleOwnerImageDelete(request, env);
+        }
+
         // Serve R2 images (public, no auth required)
         if (request.method === 'GET' && path.startsWith('/cdn/')) {
             return handleR2ImageServe(request, env, path);
@@ -3334,6 +3339,66 @@ async function handleOwnerImageUpload(request, env) {
         size: size,
         type: mimeType
     }, 201);
+}
+
+function normalizeR2DeleteKey(input) {
+    let raw = String(input || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const u = new URL(raw);
+            raw = u.pathname.replace(/^\/+/, '');
+            if (raw.startsWith('cdn/')) raw = raw.slice(4);
+            raw = raw.replace(/^\/+/, '');
+        } catch (error) {
+            raw = '';
+        }
+    } else {
+        raw = raw.replace(/^\/?cdn\//, '').replace(/^\/+/, '');
+    }
+    return raw.replace(/[^\w\-./~]/g, '');
+}
+
+async function handleOwnerImageDelete(request, env) {
+    const authorized = isOwnerAuthorized(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+
+    if (!env.PRODUCT_IMAGES || typeof env.PRODUCT_IMAGES.delete !== 'function') {
+        return jsonResponse({
+            success: false,
+            error: 'R2 bucket not configured. Bind PRODUCT_IMAGES in wrangler.jsonc.'
+        }, 503);
+    }
+
+    const body = await request.json().catch(function() { return null; });
+    if (!body || !Array.isArray(body.keys)) {
+        return jsonResponse({ success: false, error: 'Missing keys array in request body.' }, 400);
+    }
+
+    const candidates = body.keys.map(normalizeR2DeleteKey).filter(function(k) { return k && k.length >= 3; });
+    const deduped = Array.from(new Set(candidates));
+
+    const deleted = [];
+    const failed = [];
+    for (let i = 0; i < deduped.length; i++) {
+        const key = deduped[i];
+        try {
+            await env.PRODUCT_IMAGES.delete(key);
+            deleted.push(key);
+        } catch (error) {
+            failed.push({
+                key: key,
+                error: error && error.message ? error.message : 'Delete failed'
+            });
+        }
+    }
+
+    return jsonResponse({
+        success: true,
+        deleted: deleted,
+        failed: failed,
+        skipped: body.keys.length - deduped.length
+    }, failed.length ? 207 : 200);
 }
 
 // =========================================================

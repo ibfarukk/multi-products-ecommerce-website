@@ -748,12 +748,753 @@
         }
     }
 
+    /* ===============================
+       OWNER DASHBOARD NAV TABS
+       =============================== */
+    var activeNavTab = 'overview';
+    var activeProductsMode = 'multipleproducts';
+    var activeProductsConfig = {};
+    var editorDraft = null; // { isSingle, draftProduct, removedImages: Set, images: [{url, id}], specs: [], packages: [], index }
+
+    function switchNavTab(tabId) {
+        activeNavTab = tabId;
+        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.navTab === tabId);
+        });
+        document.querySelectorAll('.owner-nav-panel').forEach(function(panel) {
+            var id = 'nav-panel-' + tabId;
+            panel.classList.toggle('active', panel.id === id);
+        });
+        if (tabId === 'products') {
+            ensureProductsModeLoaded(activeProductsMode).then(renderProductsList).catch(function(error) {
+                setProductsStatus(error.message || 'Unable to load products configuration', true);
+            });
+        }
+    }
+
+    function initNavTabs() {
+        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
+            btn.addEventListener('click', function() { switchNavTab(btn.dataset.navTab); });
+        });
+        [
+            ['nav-goto-orders', 'orders'],
+            ['nav-goto-products', 'products'],
+            ['nav-goto-settings', 'settings']
+        ].forEach(function(pair) {
+            var el = document.getElementById(pair[0]);
+            if (el) el.addEventListener('click', function() { switchNavTab(pair[1]); });
+        });
+    }
+
+    function setProductsStatus(message, isError) {
+        var subheader = document.getElementById('owner-products-subheader');
+        if (!subheader) return;
+        subheader.textContent = message ? String(message) : 'Edit product details, images, specifications and pricing.';
+        subheader.style.color = isError ? '#dc2626' : '';
+    }
+
+    async function ensureProductsModeLoaded(mode) {
+        if (!configValues || Object.keys(configValues).length === 0 || configMode !== mode) {
+            configValues = await fetchConfig(mode);
+            configMode = mode;
+        }
+        activeProductsConfig = configValues;
+        activeProductsMode = mode;
+    }
+
+    function slugIdFromTitle(title) {
+        var base = String(title || 'product').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 60) || 'product';
+        return base + '-' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function normalizeSingleProductImages(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(function(item) {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') return String(item.file || item.url || item.src || '');
+            return '';
+        }).filter(function(s) { return !!s; });
+    }
+
+    function readProductsList(mode, values) {
+        if (mode === 'multipleproducts') {
+            var products = Array.isArray(values.PRODUCTS) ? values.PRODUCTS : [];
+            return products.map(function(raw, index) {
+                var p = raw && typeof raw === 'object' ? raw : {};
+                var image = String(p.image || (Array.isArray(p.images) && p.images[0] ? p.images[0] : '') || '');
+                return {
+                    __kind: 'multi',
+                    __index: index,
+                    id: String(p.id || 'product-' + index),
+                    title: String(p.title || p.shortTitle || 'Untitled'),
+                    shortTitle: String(p.shortTitle || ''),
+                    description: String(p.description || ''),
+                    longDescription: String(p.longDescription || ''),
+                    productType: String(p.productType || 'physical'),
+                    shippingFee: Number(p.shippingFee || 0),
+                    image: image,
+                    images: Array.isArray(p.images) ? p.images.map(String) : (image ? [image] : []),
+                    specs: Array.isArray(p.specs) ? p.specs.map(function(s) { return { label: String((s && s.label) || ''), value: String((s && s.value) || '') }; }) : [],
+                    packages: Array.isArray(p.packages) ? p.packages.map(function(pkg) { return { id: String((pkg && pkg.id) || ''), title: String((pkg && pkg.title) || ''), price: Number((pkg && pkg.price) || 0) }; }) : []
+                };
+            });
+        }
+        if (mode === 'singleproduct') {
+            var prod = values.PRODUCT || {};
+            var coverImage = (values.PRODUCT_IMAGES && values.PRODUCT_IMAGES[0]) ? (
+                typeof values.PRODUCT_IMAGES[0] === 'string' ? values.PRODUCT_IMAGES[0] : (values.PRODUCT_IMAGES[0].file || '')
+            ) : String(prod.coverImage || prod.image || '');
+            return [{
+                __kind: 'single',
+                __index: 0,
+                id: 'single-main-product',
+                title: String(prod.name || prod.title || 'Single Product'),
+                shortTitle: String(prod.shortName || ''),
+                description: String(prod.headline || prod.description || ''),
+                longDescription: String(prod.description || ''),
+                productType: String(prod.productType || 'physical'),
+                shippingFee: Number(prod.shippingFee || 0),
+                image: coverImage,
+                images: normalizeSingleProductImages(values.PRODUCT_IMAGES),
+                specs: Array.isArray(values.SPECIFICATIONS) ? values.SPECIFICATIONS.map(function(s) { return { label: String((s && s.label) || ''), value: String((s && s.value) || '') }; }) : [],
+                packages: Array.isArray(values.PACKAGES) ? values.PACKAGES.map(function(pkg, i) { return { id: String((pkg && pkg.id) || ('pkg-' + i)), title: String((pkg && pkg.title) || ''), price: Number((pkg && pkg.price) || 0), quantity: Number((pkg && pkg.quantity) || 1), oldPrice: Number((pkg && pkg.oldPrice) || 0) }; }) : []
+            }];
+        }
+        return [];
+    }
+
+    function formatCoverStyle(url) {
+        if (!url) return '';
+        var src = url;
+        if (src.startsWith('/cdn/') || src.startsWith('cdn/')) {
+            src = (typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).replace(/\/+$/, '') : '') + (src.startsWith('/') ? '' : '/') + src;
+        }
+        return 'background-image:url(\'' + String(src).replace(/'/g, '\\\'') + '\');';
+    }
+
+    function renderProductsList() {
+        var productsView = document.getElementById('owner-products-view');
+        var editorView = document.getElementById('owner-product-editor-view');
+        var addBtn = document.getElementById('owner-add-product-btn');
+        var modeSelect = document.getElementById('owner-products-mode');
+        if (!productsView) return;
+
+        if (modeSelect) modeSelect.value = activeProductsMode;
+        if (editorView) editorView.classList.add('owner-hidden');
+        productsView.classList.remove('owner-hidden');
+
+        var products = readProductsList(activeProductsMode, activeProductsConfig);
+        var isSingle = activeProductsMode === 'singleproduct';
+        var isAffiliate = activeProductsMode === 'affiliate';
+
+        if (addBtn) addBtn.style.display = (isSingle || isAffiliate) ? 'none' : '';
+
+        if (isAffiliate) {
+            productsView.innerHTML = '<div class="owner-products-empty">Affiliate template does not have a product catalog. Open the Settings tab to edit AFFILIATE_PRODUCTS and raw template fields.</div>';
+            setProductsStatus('Affiliate template. Use Settings for raw configuration.');
+            return;
+        }
+
+        if (!products.length) {
+            productsView.innerHTML = '<div class="owner-products-empty">No products yet. Click <strong>+ Add product</strong> to create your first one.</div>';
+            setProductsStatus('');
+            return;
+        }
+
+        setProductsStatus('');
+        var grid = document.createElement('div');
+        grid.className = 'owner-products-grid';
+        products.forEach(function(product, index) {
+            var card = document.createElement('div');
+            card.className = 'owner-product-card';
+
+            var thumb = document.createElement('div');
+            thumb.className = 'owner-product-thumb';
+            if (product.image) thumb.setAttribute('style', formatCoverStyle(product.image));
+            else thumb.textContent = (product.title || '?').slice(0, 1).toUpperCase();
+
+            var body = document.createElement('div');
+            body.className = 'owner-product-body';
+            var title = document.createElement('h4');
+            title.className = 'owner-product-title';
+            title.textContent = product.title;
+            var pid = document.createElement('div');
+            pid.className = 'owner-product-id';
+            pid.textContent = 'ID: ' + product.id;
+            var meta = document.createElement('div');
+            meta.className = 'owner-product-meta';
+            meta.textContent = (product.packages.length ? (product.packages.length + ' package' + (product.packages.length > 1 ? 's' : '')) : '0 packages')
+                + ' · ' + (product.images.length ? (product.images.length + ' image' + (product.images.length > 1 ? 's' : '')) : '0 images')
+                + ' · ' + (product.productType || 'physical');
+
+            body.appendChild(title);
+            body.appendChild(pid);
+            body.appendChild(meta);
+
+            var actions = document.createElement('div');
+            actions.className = 'owner-product-actions';
+            var editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'btn btn-primary';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', function() { openProductEditor(product, index); });
+            var delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'btn btn-secondary';
+            delBtn.textContent = isSingle ? 'View only' : 'Delete';
+            if (isSingle) delBtn.disabled = true;
+            if (!isSingle) delBtn.addEventListener('click', function() { deleteProduct(product, index); });
+            actions.appendChild(editBtn);
+            actions.appendChild(delBtn);
+
+            card.appendChild(thumb);
+            card.appendChild(body);
+            card.appendChild(actions);
+            grid.appendChild(card);
+        });
+        productsView.innerHTML = '';
+        productsView.appendChild(grid);
+    }
+
+    async function deleteProduct(product, index) {
+        if (activeProductsMode === 'singleproduct') return;
+        var ok = window.confirm('Delete product "' + String(product.title || product.id) + '"? This will remove its images from storage and can\'t be undone.');
+        if (!ok) return;
+        var toRemove = Array.from(new Set([product.image].concat(product.images || []).filter(Boolean)));
+        try {
+            if (toRemove.length) {
+                await fetch(getApiUrl('/api/owner/upload'), {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keys: toRemove })
+                });
+            }
+        } catch (error) {
+            console.warn('R2 delete partial failure:', error);
+        }
+        configValues = collectConfig();
+        if (Array.isArray(configValues.PRODUCTS)) {
+            configValues.PRODUCTS.splice(index, 1);
+        }
+        configMode = activeProductsMode;
+        activeProductsConfig = configValues;
+        try {
+            await saveConfigRaw(configValues);
+            renderProductsList();
+            setProductsStatus('Product removed successfully.');
+        } catch (error) {
+            setProductsStatus(error.message || 'Unable to delete product', true);
+        }
+    }
+
+    async function saveConfigRaw(values) {
+        var payload = Object.assign({}, values);
+        if (activeProductsMode === 'singleproduct' && !payload.WEBSITE_TYPE_SELECT) payload.WEBSITE_TYPE_SELECT = 'singleproduct';
+        var response = await fetch(getApiUrl('/api/owner/config'), {
+            method: 'PUT',
+            headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: activeProductsMode, config: payload })
+        });
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok || !data.success) throw new Error(data.error || 'Unable to save settings');
+        configValues = payload;
+        activeProductsConfig = payload;
+        return payload;
+    }
+
+    function collectImagesFromView() {
+        var imgs = [];
+        document.querySelectorAll('[data-product-image-url]').forEach(function(node) {
+            var url = String(node.dataset.productImageUrl || '').trim();
+            if (url) imgs.push(url);
+        });
+        return imgs;
+    }
+
+    function collectSpecsFromView() {
+        var rows = [];
+        var tbody = document.getElementById('editor-specs-body');
+        if (!tbody) return rows;
+        tbody.querySelectorAll('tr').forEach(function(tr) {
+            var labelInput = tr.querySelector('[data-spec-label]');
+            var valueInput = tr.querySelector('[data-spec-value]');
+            rows.push({
+                label: labelInput ? String(labelInput.value || '').trim() : '',
+                value: valueInput ? String(valueInput.value || '').trim() : ''
+            });
+        });
+        return rows.filter(function(r) { return r.label || r.value; });
+    }
+
+    function collectPackagesFromView() {
+        var rows = [];
+        var tbody = document.getElementById('editor-packages-body');
+        if (!tbody) return rows;
+        tbody.querySelectorAll('tr').forEach(function(tr) {
+            var idInput = tr.querySelector('[data-pkg-id]');
+            var titleInput = tr.querySelector('[data-pkg-title]');
+            var priceInput = tr.querySelector('[data-pkg-price]');
+            rows.push({
+                id: idInput ? String(idInput.value || '').trim() : '',
+                title: titleInput ? String(titleInput.value || '').trim() : '',
+                price: priceInput ? (priceInput.value === '' ? 0 : Number(priceInput.value)) : 0
+            });
+        });
+        return rows.filter(function(r) { return r.title || r.id || r.price; });
+    }
+
+    async function deleteR2Keys(keys) {
+        if (!keys || !keys.length) return { deleted: [], failed: [] };
+        var res = await fetch(getApiUrl('/api/owner/upload'), {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keys: keys })
+        });
+        var data = await res.json().catch(function() { return {}; });
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || ('R2 delete failed (HTTP ' + res.status + ')'));
+        }
+        return data;
+    }
+
+    function openProductEditor(product, index) {
+        var productsView = document.getElementById('owner-products-view');
+        var editorView = document.getElementById('owner-product-editor-view');
+        if (!editorView) return;
+
+        var isSingle = activeProductsMode === 'singleproduct';
+        var coverImage = product.images && product.images.length ? product.images[0] : (product.image || '');
+        editorDraft = {
+            isSingle: isSingle,
+            index: index,
+            sourceId: product.id,
+            removedImages: new Set()
+        };
+
+        var html = '';
+        html += '<div class="owner-editor-header">';
+        html += '<div><h2>' + (isSingle ? 'Edit product details' : ('Edit ' + String(product.title || product.id))) + '</h2>';
+        html += '<div class="owner-editor-subheader">' + (isSingle ? 'Single-product template' : ('Multi-product template · index ' + index)) + '</div></div>';
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+        html += '<button type="button" class="btn btn-secondary" id="editor-cancel">Back to products</button>';
+        html += '</div></div>';
+
+        // Section 1: Info
+        html += '<div class="owner-editor-section">';
+        html += '<h3>1. Product info</h3>';
+        html += '<p class="hint">Basic product details. IDs are used in URLs and should be short, lowercase with hyphens.</p>';
+        html += '<div class="owner-editor-grid">';
+        html += fieldHtml('editor-field-id', 'ID (slug)', isSingle ? String(product.id || 'single-main-product') : String(product.id || ''), 'text', isSingle);
+        html += fieldHtml('editor-field-title', 'Title', String(product.title || ''));
+        html += fieldHtml('editor-field-shortTitle', 'Short title', String(product.shortTitle || ''));
+        html += fieldHtml('editor-field-productType', 'Product type', String(product.productType || 'physical'), 'text', false, '<datalist id="editor-product-types"><option value="physical"></option><option value="digital"></option></datalist>', 'list="editor-product-types"');
+        html += fieldHtml('editor-field-shippingFee', 'Shipping fee (flat amount)', String(product.shippingFee || 0), 'number');
+        html += '</div>';
+        html += textareaHtml('editor-field-description', 'Short description (card summary)', String(product.description || ''));
+        html += textareaHtml('editor-field-longDescription', 'Long description (product page body)', String(product.longDescription || ''));
+        html += '</div>';
+
+        // Section 2: Images gallery
+        html += '<div class="owner-editor-section">';
+        html += '<h3>2. Images gallery</h3>';
+        html += '<p class="hint">First image in the grid is the cover (highlighted). Removed images are purged from R2 when you Save.</p>';
+        html += '<div id="editor-images-gallery" class="owner-image-gallery"></div>';
+        html += '<div id="editor-images-empty" class="owner-gallery-empty owner-hidden">No images yet. Upload product images below.</div>';
+        html += '<div class="owner-gallery-toolbar">';
+        html += '<button type="button" class="btn btn-secondary" id="editor-upload-images">Upload images</button>';
+        html += '<input type="file" id="editor-images-file-input" accept="image/*" multiple style="display:none;">';
+        html += '<span class="owner-save-status" id="editor-images-status" role="status"></span>';
+        html += '</div>';
+        html += '</div>';
+
+        // Section 3: Specs
+        html += '<div class="owner-editor-section">';
+        html += '<h3>3. Specifications</h3>';
+        html += '<p class="hint">Label-value pairs that appear under the product description or specs tab.</p>';
+        html += '<table class="owner-editor-table"><thead><tr><th style="width:28%;">Label</th><th>Value</th><th style="width:100px;"></th></tr></thead>';
+        html += '<tbody id="editor-specs-body"></tbody></table>';
+        html += '<div class="owner-editor-table-actions"><button type="button" class="btn btn-secondary" id="editor-add-spec">+ Add specification</button></div>';
+        html += '</div>';
+
+        // Section 4: Packages
+        html += '<div class="owner-editor-section">';
+        html += '<h3>4. Packages &amp; pricing</h3>';
+        html += '<p class="hint">Each package is a purchasable variant: id, title, and price. Leave price at 0 for free items.</p>';
+        html += '<table class="owner-editor-table"><thead><tr><th style="width:24%;">Package ID</th><th>Title</th><th style="width:22%;">Price</th><th style="width:100px;"></th></tr></thead>';
+        html += '<tbody id="editor-packages-body"></tbody></table>';
+        html += '<div class="owner-editor-table-actions"><button type="button" class="btn btn-secondary" id="editor-add-package">+ Add package</button></div>';
+        html += '</div>';
+
+        html += '<div class="owner-editor-footer">';
+        html += '<span class="owner-save-status" id="editor-save-status" role="status"></span>';
+        html += '<button type="button" class="btn btn-secondary" id="editor-cancel-bottom">Discard changes</button>';
+        html += '<button type="button" class="btn btn-primary" id="editor-save">Save product</button>';
+        html += '</div>';
+
+        editorView.innerHTML = html;
+        productsView.classList.add('owner-hidden');
+        editorView.classList.remove('owner-hidden');
+
+        // Render images gallery
+        renderImagesInEditor(product.images.slice(), coverImage);
+
+        // Render specs
+        (product.specs || []).forEach(function(spec) { addSpecRow(spec.label, spec.value); });
+        if (!(product.specs || []).length) addSpecRow('', '');
+
+        // Render packages
+        (product.packages || []).forEach(function(pkg) { addPackageRow(pkg.id, pkg.title, pkg.price); });
+        if (!(product.packages || []).length) addPackageRow('', '', 0);
+
+        // Bindings
+        document.getElementById('editor-cancel').addEventListener('click', closeProductEditor);
+        document.getElementById('editor-cancel-bottom').addEventListener('click', closeProductEditor);
+        document.getElementById('editor-save').addEventListener('click', saveProductEditor);
+
+        document.getElementById('editor-add-spec').addEventListener('click', function() { addSpecRow('', ''); });
+        document.getElementById('editor-add-package').addEventListener('click', function() { addPackageRow('', '', 0); });
+
+        var fileInput = document.getElementById('editor-images-file-input');
+        document.getElementById('editor-upload-images').addEventListener('click', function() { fileInput.click(); });
+        fileInput.addEventListener('change', handleEditorImageFilesSelected);
+    }
+
+    function closeProductEditor() {
+        editorDraft = null;
+        renderProductsList();
+    }
+
+    function fieldHtml(id, label, value, type, disabled, extraHtml, extraAttrs) {
+        type = type || 'text';
+        var input = '<input type="' + type + '" id="' + id + '" value="' + String(value || '').replace(/"/g, '&quot;') + '"' + (disabled ? ' disabled' : '') + ' ' + (extraAttrs || '') + '>';
+        return '<div class="owner-field"><span>' + String(label) + '</span>' + input + '</div>' + (extraHtml || '');
+    }
+
+    function textareaHtml(id, label, value) {
+        return '<div class="owner-field" style="margin-top:10px;"><span>' + String(label) + '</span><textarea rows="3" id="' + id + '">' + String(value || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea></div>';
+    }
+
+    function setEditorImagesStatus(message, isError) {
+        var el = document.getElementById('editor-images-status');
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isError ? '#dc2626' : '#16a34a';
+    }
+
+    function renderImagesInEditor(urls, cover) {
+        var gallery = document.getElementById('editor-images-gallery');
+        var empty = document.getElementById('editor-images-empty');
+        if (!gallery) return;
+        gallery.innerHTML = '';
+        var items = urls && urls.length ? urls.slice() : [];
+        if (!items.length) {
+            if (empty) empty.classList.remove('owner-hidden');
+            return;
+        }
+        if (empty) empty.classList.add('owner-hidden');
+        var currentCover = cover || items[0] || '';
+        items.forEach(function(url, i) {
+            var tile = document.createElement('div');
+            tile.className = 'owner-image-tile' + (String(url) === String(currentCover) ? ' is-cover' : '');
+            tile.dataset.productImageUrl = String(url);
+
+            var img = document.createElement('img');
+            img.alt = 'Product image ' + (i + 1);
+            img.referrerPolicy = 'no-referrer';
+            if (String(url).startsWith('/cdn/') || String(url).startsWith('cdn/')) {
+                var base = typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).replace(/\/+$/, '') : '';
+                img.src = base + (String(url).startsWith('/') ? '' : '/') + String(url);
+            } else {
+                img.src = url;
+            }
+            img.onerror = function() { this.style.opacity = '0.2'; };
+
+            var actions = document.createElement('div');
+            actions.className = 'owner-image-tile-actions';
+            var top = document.createElement('div');
+            top.className = 'owner-image-tile-actions-row';
+            var coverBtn = document.createElement('button');
+            coverBtn.type = 'button';
+            coverBtn.className = 'owner-image-tile-btn primary';
+            coverBtn.textContent = String(url) === String(currentCover) ? '✓ Cover' : 'Make cover';
+            coverBtn.addEventListener('click', function() {
+                var imgs = collectImagesFromView();
+                renderImagesInEditor(imgs, url);
+            });
+            top.appendChild(coverBtn);
+
+            var bottom = document.createElement('div');
+            bottom.className = 'owner-image-tile-actions-row bottom';
+            var orderLabel = document.createElement('span');
+            orderLabel.style.color = '#fff';
+            orderLabel.style.fontWeight = '800';
+            orderLabel.style.fontSize = '0.75rem';
+            orderLabel.style.background = 'rgba(0,0,0,0.35)';
+            orderLabel.style.padding = '4px 8px';
+            orderLabel.style.borderRadius = '10px';
+            orderLabel.textContent = (i + 1) + ' / ' + items.length;
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'owner-image-tile-btn danger';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', function() {
+                if (!window.confirm('Remove this image? It will be deleted from storage when you Save.')) return;
+                if (editorDraft) editorDraft.removedImages.add(String(url));
+                var imgs = collectImagesFromView().filter(function(u) { return String(u) !== String(url); });
+                var newCover = String(currentCover) === String(url) ? (imgs[0] || '') : currentCover;
+                renderImagesInEditor(imgs, newCover);
+            });
+            bottom.appendChild(orderLabel);
+            bottom.appendChild(removeBtn);
+
+            actions.appendChild(top);
+            actions.appendChild(bottom);
+            tile.appendChild(img);
+            tile.appendChild(actions);
+            gallery.appendChild(tile);
+        });
+    }
+
+    async function handleEditorImageFilesSelected(evt) {
+        var files = evt.target.files;
+        if (!files || !files.length) return;
+        setEditorImagesStatus('Uploading 0/' + files.length + '...');
+        var urls = collectImagesFromView();
+        var errors = [];
+        for (var i = 0; i < files.length; i++) {
+            var file = files[i];
+            try {
+                setEditorImagesStatus('Uploading ' + (i + 1) + '/' + files.length + ': ' + file.name);
+                var result = await uploadImageFile(file, (editorDraft && editorDraft.isSingle ? 'PRODUCT_IMAGES' : 'PRODUCTS[' + editorDraft.index + '].images'));
+                if (result && result.url) urls.push(String(result.url));
+                var currentCover = (urls.find(function(u) { return document.querySelector('.owner-image-tile.is-cover[data-product-image-url="' + String(u).replace(/"/g, '\\"') + '"]'); }) ? '' : urls[0]);
+                renderImagesInEditor(urls, currentCover);
+            } catch (error) {
+                errors.push(file.name + ': ' + (error.message || 'Upload failed'));
+            }
+        }
+        if (errors.length) setEditorImagesStatus('Uploaded with issues: ' + errors.join('; '), true);
+        else setEditorImagesStatus('All images uploaded. Don\'t forget to Save.');
+        evt.target.value = '';
+    }
+
+    function addSpecRow(label, value) {
+        var tbody = document.getElementById('editor-specs-body');
+        if (!tbody) return;
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><input data-spec-label type="text" value="' + String(label || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Capacity"></td>' +
+            '<td><input data-spec-value type="text" value="' + String(value || '').replace(/"/g, '&quot;') + '" placeholder="e.g. 20,000 mAh"></td>' +
+            '<td style="text-align:right;"><button type="button" class="owner-inline-btn" data-remove-row>Remove</button></td>';
+        tr.querySelector('[data-remove-row]').addEventListener('click', function() {
+            if (tbody.children.length > 1) tr.remove();
+            else {
+                tr.querySelector('[data-spec-label]').value = '';
+                tr.querySelector('[data-spec-value]').value = '';
+            }
+        });
+        tbody.appendChild(tr);
+    }
+
+    function addPackageRow(id, title, price) {
+        var tbody = document.getElementById('editor-packages-body');
+        if (!tbody) return;
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><input data-pkg-id type="text" value="' + String(id || '').replace(/"/g, '&quot;') + '" placeholder="e.g. single"></td>' +
+            '<td><input data-pkg-title type="text" value="' + String(title || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Single Unit"></td>' +
+            '<td><input data-pkg-price type="number" step="any" value="' + String(price == null ? '' : price) + '" placeholder="0"></td>' +
+            '<td style="text-align:right;"><button type="button" class="owner-inline-btn" data-remove-row>Remove</button></td>';
+        tr.querySelector('[data-remove-row]').addEventListener('click', function() {
+            if (tbody.children.length > 1) tr.remove();
+            else {
+                tr.querySelector('[data-pkg-id]').value = '';
+                tr.querySelector('[data-pkg-title]').value = '';
+                tr.querySelector('[data-pkg-price]').value = '';
+            }
+        });
+        tbody.appendChild(tr);
+    }
+
+    function setEditorSaveStatus(message, isError) {
+        var el = document.getElementById('editor-save-status');
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isError ? '#dc2626' : '#16a34a';
+    }
+
+    async function saveProductEditor() {
+        if (!editorDraft) return;
+        setEditorSaveStatus('Saving...');
+
+        try {
+            var newId = val('editor-field-id');
+            var title = val('editor-field-title');
+            if (!String(title || '').trim()) throw new Error('Product title is required.');
+            if (!String(newId || '').trim()) throw new Error('Product ID is required.');
+            var shortTitle = val('editor-field-shortTitle');
+            var productType = val('editor-field-productType') || 'physical';
+            var shippingFee = val('editor-field-shippingFee');
+            shippingFee = shippingFee === '' ? 0 : Number(shippingFee);
+            var description = val('editor-field-description');
+            var longDescription = val('editor-field-longDescription');
+
+            var images = collectImagesFromView();
+            var coverTile = document.querySelector('.owner-image-tile.is-cover');
+            var image = coverTile ? String(coverTile.dataset.productImageUrl || '') : (images[0] || '');
+            if (!image && images[0]) image = images[0];
+
+            var specs = collectSpecsFromView();
+            var packages = collectPackagesFromView();
+
+            // 1. Purge removed R2 images
+            var removed = Array.from(editorDraft.removedImages || []).filter(Boolean);
+            if (removed.length) {
+                try {
+                    await deleteR2Keys(removed);
+                } catch (error) {
+                    console.warn('Non-fatal R2 delete fail:', error);
+                }
+            }
+
+            // 2. Sync config
+            configValues = collectConfig();
+            if (editorDraft.isSingle) {
+                configValues.PRODUCT = Object.assign({}, (configValues.PRODUCT || {}), {
+                    name: title,
+                    title: title,
+                    shortName: shortTitle,
+                    headline: description,
+                    description: longDescription,
+                    productType: productType,
+                    shippingFee: shippingFee,
+                    coverImage: image,
+                    image: image
+                });
+                var nextImages = images.map(function(u) {
+                    return { enabled: true, file: u };
+                });
+                if (configValues.PRODUCT_IMAGES && Array.isArray(configValues.PRODUCT_IMAGES)) {
+                    // merge the enabled+ file shape; overwrite for simplicity
+                }
+                configValues.PRODUCT_IMAGES = nextImages;
+                // specs
+                configValues.SPECIFICATIONS = specs.slice();
+                // packages (preserve existing keys like quantity, oldPrice from existing matching by id)
+                var existingPackages = Array.isArray(configValues.PACKAGES) ? configValues.PACKAGES : [];
+                configValues.PACKAGES = packages.map(function(pkg) {
+                    var existing = existingPackages.find(function(p) { return p && String(p.id) === String(pkg.id); });
+                    return Object.assign({}, (existing || {}), {
+                        id: pkg.id,
+                        title: pkg.title,
+                        price: pkg.price,
+                        quantity: (existing && existing.quantity != null) ? existing.quantity : 1
+                    });
+                });
+            } else {
+                if (!Array.isArray(configValues.PRODUCTS)) configValues.PRODUCTS = [];
+                var updated = {
+                    id: newId,
+                    title: title,
+                    shortTitle: shortTitle,
+                    description: description,
+                    longDescription: longDescription,
+                    productType: productType,
+                    shippingFee: shippingFee,
+                    image: image,
+                    images: images.slice(),
+                    specs: specs.slice(),
+                    packages: packages.map(function(pkg) { return { id: pkg.id, title: pkg.title, price: pkg.price }; })
+                };
+                if (editorDraft.index >= 0 && editorDraft.index < configValues.PRODUCTS.length) {
+                    configValues.PRODUCTS[editorDraft.index] = updated;
+                } else {
+                    configValues.PRODUCTS.push(updated);
+                }
+            }
+
+            // 3. PUT save
+            await saveConfigRaw(configValues);
+
+            editorDraft.removedImages = new Set();
+            setEditorSaveStatus('Saved successfully. Refresh the storefront to see changes.');
+            setTimeout(function() { closeProductEditor(); }, 900);
+        } catch (error) {
+            setEditorSaveStatus(error.message || 'Save failed.', true);
+        }
+    }
+
+    function val(id) {
+        var el = document.getElementById(id);
+        if (!el) return '';
+        return el.type === 'checkbox' ? el.checked : (el.value == null ? '' : el.value);
+    }
+
+    function initProductsManagement() {
+        var modeSelect = document.getElementById('owner-products-mode');
+        var addBtn = document.getElementById('owner-add-product-btn');
+        if (modeSelect) modeSelect.addEventListener('change', async function() {
+            var target = String(modeSelect.value || 'multipleproducts');
+            try {
+                configValues = await fetchConfig(target);
+                configMode = target;
+                activeProductsConfig = configValues;
+                activeProductsMode = target;
+                // Sync Settings sub-tab active state
+                document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+                    tab.classList.toggle('active', tab.dataset.configMode === target);
+                });
+                renderProductsList();
+                setProductsStatus('Switched to ' + target);
+            } catch (error) {
+                setProductsStatus(error.message || 'Unable to switch template', true);
+            }
+        });
+        if (addBtn) addBtn.addEventListener('click', function() {
+            if (activeProductsMode === 'singleproduct' || activeProductsMode === 'affiliate') return;
+            var blank = {
+                __kind: 'multi',
+                __index: (Array.isArray(activeProductsConfig.PRODUCTS) ? activeProductsConfig.PRODUCTS.length : 0),
+                id: slugIdFromTitle('New Product'),
+                title: 'New Product',
+                shortTitle: '',
+                description: '',
+                longDescription: '',
+                productType: 'physical',
+                shippingFee: 0,
+                image: '',
+                images: [],
+                specs: [{ label: '', value: '' }],
+                packages: [{ id: 'standard', title: 'Standard', price: 0 }]
+            };
+            if (!Array.isArray(activeProductsConfig.PRODUCTS)) configValues.PRODUCTS = [];
+            configValues.PRODUCTS.push({
+                id: blank.id,
+                title: blank.title,
+                shortTitle: blank.shortTitle,
+                description: blank.description,
+                longDescription: blank.longDescription,
+                productType: blank.productType,
+                shippingFee: blank.shippingFee,
+                image: blank.image,
+                images: [],
+                specs: [{ label: '', value: '' }],
+                packages: [{ id: 'standard', title: 'Standard', price: 0 }]
+            });
+            activeProductsConfig = configValues;
+            openProductEditor(blank, blank.__index);
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         injectBrandVariables();
         initLogin();
         initLookup();
         initActions();
         initConfig();
+        initNavTabs();
+        initProductsManagement();
         loadDashboard();
     });
 })();

@@ -185,6 +185,272 @@
         .owner-add-item, .owner-remove-item { margin-top: 10px; font-size: .88rem; padding: 8px 12px; }
         .owner-config-footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         .owner-save-status { color: var(--muted); font-size: .95rem; }
+
+        /* Top-level dashboard nav tabs */
+        .owner-nav-tabs {
+            display: flex;
+            gap: 0;
+            flex-wrap: wrap;
+            border-bottom: 1px solid var(--border);
+            margin: 0 0 20px;
+            padding: 0;
+            background: #fff;
+            border-radius: 20px 20px 0 0;
+            overflow: hidden;
+        }
+        .owner-nav-tab {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: 14px 18px;
+            cursor: pointer;
+            font-weight: 800;
+            border-bottom: 3px solid transparent;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .owner-nav-tab:hover { color: var(--text); background: #f8fafc; }
+        .owner-nav-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            background: #fff;
+        }
+        .owner-nav-panel { display: none; }
+        .owner-nav-panel.active { display: block; }
+
+        /* Products grid */
+        .owner-products-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .owner-products-toolbar h3 { margin: 0; }
+        .owner-products-empty {
+            border: 2px dashed var(--border);
+            border-radius: 18px;
+            padding: 40px 18px;
+            text-align: center;
+            color: var(--muted);
+            background: #fafafa;
+        }
+        .owner-products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+        .owner-product-card {
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            overflow: hidden;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.15s ease, transform 0.15s ease;
+        }
+        .owner-product-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        .owner-product-thumb {
+            aspect-ratio: 16 / 10;
+            background: #f1f5f9 center/cover no-repeat;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            font-weight: 800;
+            font-size: 2rem;
+        }
+        .owner-product-body { padding: 14px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; }
+        .owner-product-title {
+            font-size: 1.05rem;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.3;
+        }
+        .owner-product-id { font-size: 0.8rem; color: var(--muted); }
+        .owner-product-meta { font-size: 0.88rem; color: var(--text); margin-top: auto; padding-top: 8px; }
+        .owner-product-actions {
+            display: flex;
+            gap: 8px;
+            padding: 0 14px 14px;
+            border-top: 1px solid var(--border-light);
+            padding-top: 12px;
+            margin-top: 10px;
+        }
+        .owner-product-actions .btn { flex: 1 1 auto; padding: 9px 10px; font-size: 0.9rem; }
+
+        /* Product editor */
+        .owner-editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .owner-editor-header h2 { margin: 0; font-size: 1.35rem; }
+        .owner-editor-subheader { color: var(--muted); margin-top: 4px; font-size: 0.92rem; }
+        .owner-editor-section {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+            background: #fff;
+        }
+        .owner-editor-section h3 {
+            margin: 0 0 12px;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .owner-editor-section .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 10px; }
+        .owner-editor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        .owner-editor-footer {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            border-top: 1px solid var(--border);
+            padding: 14px 0;
+            margin-top: 18px;
+        }
+        .owner-editor-footer .owner-save-status { flex: 1 1 auto; }
+
+        /* Images gallery editor */
+        .owner-image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .owner-image-tile {
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+            position: relative;
+            aspect-ratio: 1 / 1;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .owner-image-tile.is-cover {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, #fff);
+        }
+        .owner-image-tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .owner-image-tile-actions {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 6px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.55) 100%);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .owner-image-tile:hover .owner-image-tile-actions { opacity: 1; }
+        .owner-image-tile-actions-row {
+            display: flex;
+            gap: 6px;
+            justify-content: flex-end;
+        }
+        .owner-image-tile-actions-row.bottom { justify-content: space-between; align-items: flex-end; }
+        .owner-image-tile-btn {
+            border: 0;
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.78rem;
+            cursor: pointer;
+            background: rgba(255,255,255,0.92);
+            color: var(--text);
+        }
+        .owner-image-tile-btn.primary { background: var(--primary); color: #fff; }
+        .owner-image-tile-btn.danger { background: #fee2e2; color: #b91c1c; }
+        .owner-image-tile-btn:hover { filter: brightness(0.96); }
+        .owner-gallery-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .owner-gallery-empty {
+            color: var(--muted);
+            text-align: center;
+            padding: 18px 10px;
+            border: 2px dashed var(--border);
+            border-radius: 14px;
+            background: #fafafa;
+        }
+
+        /* Editable specs & packages tables */
+        .owner-editor-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .owner-editor-table th, .owner-editor-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-light);
+            vertical-align: middle;
+        }
+        .owner-editor-table th { color: var(--muted); font-size: 0.85rem; font-weight: 800; }
+        .owner-editor-table input, .owner-editor-table textarea {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font: inherit;
+            background: #fff;
+            color: var(--text);
+            box-sizing: border-box;
+        }
+        .owner-editor-table-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .owner-inline-btn {
+            border: 0;
+            background: transparent;
+            color: #b91c1c;
+            font-weight: 800;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+        .owner-inline-btn:hover { background: #fee2e2; }
+
+        @media (max-width: 640px) {
+            .owner-editor-section { padding: 12px; border-radius: 12px; }
+            .owner-editor-footer { justify-content: stretch; }
+            .owner-editor-footer .btn { flex: 1 1 auto; }
+            .owner-nav-tab { padding: 12px 14px; font-size: 0.88rem; }
+        }
     </style>
 </head>
 <body>
@@ -260,38 +526,82 @@
                 </div>
 
                 <div class="owner-panel">
-                    <div class="owner-note">
-                        <strong>What these numbers mean</strong><br>
-                        Successful sales count verified Paystack orders. Manual orders are tracked separately because they may still be awaiting confirmation. Failed sales count backend verification failures. Abandoned checkout counts Paystack windows closed before completion.
+                    <div class="owner-nav-tabs" role="tablist" aria-label="Owner dashboard sections">
+                        <button class="owner-nav-tab active" type="button" data-nav-tab="overview">Overview</button>
+                        <button class="owner-nav-tab" type="button" data-nav-tab="orders">Orders &amp; Lookup</button>
+                        <button class="owner-nav-tab" type="button" data-nav-tab="products">Products</button>
+                        <button class="owner-nav-tab" type="button" data-nav-tab="settings">Settings</button>
                     </div>
-                    <div id="owner-dashboard-error" class="owner-error owner-hidden"></div>
-                    <div class="owner-lookup">
-                        <h2 style="margin: 22px 0 12px 0;">Reference Lookup</h2>
-                        <form id="owner-lookup-form" class="owner-lookup-form">
-                            <div class="form-group">
-                                <label for="owner-lookup-ref">Payment Reference</label>
-                                <input type="text" id="owner-lookup-ref" autocomplete="off" placeholder="e.g. PMELAB-ABC123..." required>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Search</button>
-                        </form>
-                        <div id="owner-lookup-error" class="owner-error owner-hidden" role="alert" aria-live="polite"></div>
-                        <div id="owner-lookup-result" class="owner-lookup-result owner-hidden" aria-live="polite"></div>
-                    </div>
-                </div>
 
-                <div class="owner-panel owner-config">
-                    <h2>Site Configuration</h2>
-                    <p class="owner-meta">This script is developed and owned by PMELAB TECHNOLOGY LIMITED. We reserve the full copyright., you can get in touch with us via SUPPORT@PAYMELAB.COM, WWW.PAYMELAB.COM, You can buy this script legally only from Simrapay.com or Paymelab.com. Edit every setting used by the selected template. For image fields, use the <strong>Upload Image</strong> button to upload directly to Cloudflare R2, or paste an existing URL / <strong>productsimages/</strong> path.</p>
-                    <div class="owner-tabs" role="tablist" aria-label="Site configuration modes">
-                        <button class="owner-tab active" type="button" data-config-mode="affiliate">Affiliate settings</button>
-                        <button class="owner-tab" type="button" data-config-mode="multipleproducts">Multi settings</button>
-                        <button class="owner-tab" type="button" data-config-mode="singleproduct">Single settings</button>
+                    <div id="nav-panel-overview" class="owner-nav-panel active">
+                        <div class="owner-note">
+                            <strong>What these numbers mean</strong><br>
+                            Successful sales count verified Paystack &amp; Flutterwave orders. Manual orders are tracked separately because they may still be awaiting confirmation. Failed sales count backend verification failures. Abandoned checkout counts payment windows closed before completion.
+                        </div>
+                        <div id="owner-dashboard-error" class="owner-error owner-hidden"></div>
+                        <div style="margin-top: 24px; padding: 18px; border:1px solid var(--border); border-radius: 16px; background:#fff;">
+                            <h3 style="margin: 0 0 10px;">Quick actions</h3>
+                            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary" id="nav-goto-orders">Lookup payment reference</button>
+                                <button type="button" class="btn btn-secondary" id="nav-goto-products">Manage products</button>
+                                <button type="button" class="btn btn-secondary" id="nav-goto-settings">Advanced site settings</button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="owner-config-sections"></div>
-                    <div class="owner-config-footer">
-                        <button id="owner-config-save" class="btn btn-primary" type="button">Save settings</button>
-                        <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload</button>
-                        <span id="owner-config-status" class="owner-save-status" role="status" aria-live="polite"></span>
+
+                    <div id="nav-panel-orders" class="owner-nav-panel">
+                        <div class="owner-lookup">
+                            <h3 style="margin: 0 0 12px 0;">Payment reference lookup</h3>
+                            <p class="owner-meta">Search any Paystack or Flutterwave reference to see the full order details.</p>
+                            <form id="owner-lookup-form" class="owner-lookup-form">
+                                <div class="form-group">
+                                    <label for="owner-lookup-ref">Payment Reference</label>
+                                    <input type="text" id="owner-lookup-ref" autocomplete="off" placeholder="e.g. PMELAB-ABC123..." required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Search</button>
+                            </form>
+                            <div id="owner-lookup-error" class="owner-error owner-hidden" role="alert" aria-live="polite"></div>
+                            <div id="owner-lookup-result" class="owner-lookup-result owner-hidden" aria-live="polite"></div>
+                        </div>
+                    </div>
+
+                    <div id="nav-panel-products" class="owner-nav-panel">
+                        <div class="owner-products-toolbar">
+                            <div>
+                                <h3 style="margin: 0 0 4px;">Products</h3>
+                                <p class="owner-meta" id="owner-products-subheader" style="margin:0; font-size:0.9rem;">
+                                    Edit product details, images, specifications and pricing.
+                                </p>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <select id="owner-products-mode" class="form-group" style="margin:0;">
+                                    <option value="multipleproducts">Multi-product template</option>
+                                    <option value="singleproduct">Single-product template</option>
+                                    <option value="affiliate">Affiliate template</option>
+                                </select>
+                                <button type="button" class="btn btn-primary" id="owner-add-product-btn">+ Add product</button>
+                            </div>
+                        </div>
+                        <div id="owner-products-view"></div>
+                        <div id="owner-product-editor-view" class="owner-hidden"></div>
+                    </div>
+
+                    <div id="nav-panel-settings" class="owner-nav-panel">
+                        <div class="owner-config">
+                            <h3 style="margin: 0 0 4px;">Site configuration (advanced)</h3>
+                            <p class="owner-meta">This script is developed and owned by PMELAB TECHNOLOGY LIMITED. We reserve the full copyright. You can get in touch with us via SUPPORT@PAYMELAB.COM, WWW.PAYMELAB.COM, You can buy this script legally only from Simrapay.com or Paymelab.com. Edit every setting used by the selected template. For image fields, use the <strong>Upload Image</strong> button to upload directly to Cloudflare R2, or paste an existing URL.</p>
+                            <div class="owner-tabs" role="tablist" aria-label="Site configuration modes">
+                                <button class="owner-tab active" type="button" data-config-mode="affiliate">Affiliate settings</button>
+                                <button class="owner-tab" type="button" data-config-mode="multipleproducts">Multi settings</button>
+                                <button class="owner-tab" type="button" data-config-mode="singleproduct">Single settings</button>
+                            </div>
+                            <div id="owner-config-sections"></div>
+                            <div class="owner-config-footer">
+                                <button id="owner-config-save" class="btn btn-primary" type="button">Save settings</button>
+                                <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload</button>
+                                <span id="owner-config-status" class="owner-save-status" role="status" aria-live="polite"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
