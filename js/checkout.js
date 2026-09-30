@@ -478,7 +478,7 @@
                 setSubmitting(true);
                 submitManualOrder(payload, receipt)
                     .then(function() {
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef);
+                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1' + (selection && selection.pkg && selection.pkg.id ? ('&pkg=' + encodeURIComponent(String(selection.pkg.id))) : '');
                     })
                     .catch(function(error) {
                         showError(error && error.message ? error.message : 'Manual order submission failed.');
@@ -679,7 +679,7 @@
                 setInlineSubmitting(true);
                 submitManualOrder(payload, receipt)
                     .then(function() {
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef);
+                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1' + (totals && totals.package_id ? ('&pkg=' + encodeURIComponent(String(totals.package_id))) : '');
                     })
                     .catch(function(error) {
                         showInlineError(error && error.message ? error.message : 'Manual order submission failed.');

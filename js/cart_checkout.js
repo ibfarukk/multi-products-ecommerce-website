@@ -475,7 +475,7 @@
                         if (window.PMELAB_CART && typeof window.PMELAB_CART.clear === 'function') {
                             window.PMELAB_CART.clear();
                         }
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef);
+                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1&pkg=cart';
                     })
                     .catch(function(error) {
                         showError(error && error.message ? error.message : 'Manual order submission failed.');
