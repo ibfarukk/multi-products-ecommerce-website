@@ -278,6 +278,16 @@
         .owner-config-footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         .owner-save-status { color: var(--muted); font-size: .95rem; }
 
+        /* Site selector editor */
+        .site-selector-presets { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px; }
+        .site-selector-presets button { padding: 8px 12px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-size:.85rem; color:#0f172a; }
+        .site-selector-presets button:hover { border-color:#0f766e; color:#0f766e; }
+        .site-selector-editor textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.88rem; line-height:1.5; width:100%; min-height: 380px; border:1px solid var(--border); border-radius:12px; padding: 14px; background:#0f172a; color:#e2e8f0; }
+        .site-selector-verify { margin-top: 14px; display:flex; justify-content: space-between; align-items:center; gap:10px; flex-wrap:wrap; padding: 12px 14px; border:1px dashed var(--border); border-radius:12px; background:#f8fafc; }
+        .site-selector-verify strong { color:#0f766e; }
+        .site-selector-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top: 12px; }
+        .site-selector-meta { color: var(--muted); font-size: 0.9rem; }
+
         /* Top-level dashboard nav tabs */
         .owner-nav-tabs {
             display: flex;
@@ -662,6 +672,7 @@
                         <button class="owner-nav-tab active" type="button" data-nav-tab="overview">Overview</button>
                         <button class="owner-nav-tab" type="button" data-nav-tab="orders">Orders &amp; Lookup</button>
                         <button class="owner-nav-tab" type="button" data-nav-tab="products">Products</button>
+                        <button class="owner-nav-tab" type="button" data-nav-tab="site-selector">Site Selector</button>
                         <button class="owner-nav-tab" type="button" data-nav-tab="settings">Settings</button>
                     </div>
 
@@ -676,6 +687,7 @@
                             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                                 <button type="button" class="btn btn-secondary" id="nav-goto-orders">Lookup payment reference</button>
                                 <button type="button" class="btn btn-secondary" id="nav-goto-products">Manage products</button>
+                                <button type="button" class="btn btn-secondary" id="nav-goto-site-selector">Change store template</button>
                                 <button type="button" class="btn btn-secondary" id="nav-goto-settings">Advanced site settings</button>
                             </div>
                         </div>
@@ -716,6 +728,31 @@
                         </div>
                         <div id="owner-products-view"></div>
                         <div id="owner-product-editor-view" class="owner-hidden"></div>
+                    </div>
+
+                    <div id="nav-panel-site-selector" class="owner-nav-panel">
+                        <div class="site-selector-editor">
+                            <h3 style="margin: 0 0 4px;">Site Selector</h3>
+                            <p class="site-selector-meta" style="margin: 0 0 14px;">Choose which storefront template is shown to customers. Select a quick preset or edit the file directly, then click Save. Changes apply immediately to customers. Source: <span id="site-selector-source" style="color:#0f766e; font-weight:600;">assets</span></p>
+                            <div class="site-selector-presets">
+                                <button type="button" data-site-selector-preset="singleproduct">Apply Single Product mode</button>
+                                <button type="button" data-site-selector-preset="multipleproducts">Apply Multiple Products mode</button>
+                                <button type="button" data-site-selector-preset="affiliate">Apply Affiliate mode</button>
+                            </div>
+                            <textarea id="site-selector-editor-textarea" spellcheck="false" aria-label="site_selector.js editor"></textarea>
+                            <div class="site-selector-actions">
+                                <button type="button" id="site-selector-save-btn" class="btn btn-primary">Save site_selector.js</button>
+                                <button type="button" id="site-selector-reload-btn" class="btn btn-secondary">Reload</button>
+                                <span id="site-selector-status" class="owner-save-status" role="status" aria-live="polite"></span>
+                            </div>
+                            <div class="site-selector-verify">
+                                <div>
+                                    <div class="site-selector-meta">Active mode used by Worker (served via /js/site_selector.js): <strong id="site-selector-live-mode">multipleproducts</strong></div>
+                                    <div class="site-selector-meta" style="margin-top:4px;">Server-side redirects and product settings products will auto-refresh the storefront immediately after you click Save. We also refresh on every request.</div>
+                                </div>
+                                <div class="site-selector-meta">Tip: the uncomment exactly one line. The Worker rewrite always overwrites the static file so customers receive. Server redirects take higher priority.</div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="nav-panel-settings" class="owner-nav-panel">

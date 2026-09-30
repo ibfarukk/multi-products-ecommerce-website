@@ -920,6 +920,8 @@
             ensureProductsModeLoaded(activeProductsMode).then(renderProductsList).catch(function(error) {
                 setProductsStatus(error.message || 'Unable to load products configuration', true);
             });
+        } else if (tabId === 'site-selector') {
+            loadSiteSelectorEditor();
         }
     }
 
@@ -930,6 +932,7 @@
         [
             ['nav-goto-orders', 'orders'],
             ['nav-goto-products', 'products'],
+            ['nav-goto-site-selector', 'site-selector'],
             ['nav-goto-settings', 'settings']
         ].forEach(function(pair) {
             var el = document.getElementById(pair[0]);
@@ -1210,6 +1213,137 @@
             sel.addEventListener('change', function() { setSiteModeStatus('Unsaved changes. Click Apply.'); });
         }
         if (saveBtn) saveBtn.addEventListener('click', saveSiteMode);
+    }
+
+    var currentSiteSelectorContent = '';
+    function setSiteSelectorStatus(message, isError) {
+        var el = document.getElementById('site-selector-status');
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isError ? '#dc2626' : '';
+    }
+
+    function setSiteSelectorSource(source) {
+        var el = document.getElementById('site-selector-source');
+        if (el) el.textContent = source === 'kv' ? 'Owner saved override (KV)' : (source === 'default' ? 'Built-in default' : 'Original assets file');
+    }
+
+    async function loadSiteSelectorEditor() {
+        var ta = document.getElementById('site-selector-editor-textarea');
+        var liveMode = document.getElementById('site-selector-live-mode');
+        if (!ta) return;
+        setSiteSelectorStatus('Loading site_selector.js...');
+        try {
+            var res = await fetch(getApiUrl('/api/owner/site-selector'), {
+                method: 'GET',
+                headers: { 'Authorization': 'Basic ' + getAuthToken() }
+            });
+            var data = await res.json().catch(function() { return {}; });
+            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to load site_selector.js');
+            currentSiteSelectorContent = typeof data.content === 'string' ? data.content : '';
+            ta.value = currentSiteSelectorContent;
+            setSiteSelectorSource(data.source || 'assets');
+            if (liveMode) liveMode.textContent = String(data.activeInFile || 'multipleproducts');
+            setSiteSelectorStatus('');
+        } catch (error) {
+            setSiteSelectorStatus(error.message || 'Unable to load site_selector.js', true);
+        }
+    }
+
+    async function saveSiteSelectorEditor() {
+        var ta = document.getElementById('site-selector-editor-textarea');
+        var liveMode = document.getElementById('site-selector-live-mode');
+        if (!ta) return;
+        setSiteSelectorStatus('Saving...');
+        try {
+            var res = await fetch(getApiUrl('/api/owner/site-selector'), {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Basic ' + getAuthToken(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content: ta.value })
+            });
+            var data = await res.json().catch(function() { return {}; });
+            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to save site_selector.js');
+            currentSiteSelectorContent = ta.value;
+            setSiteSelectorSource('kv');
+            if (liveMode) liveMode.textContent = String(data.activeInFile || 'multipleproducts');
+            // Sync the header Store Mode + products/settings mode state to the newly saved value
+            var chosen = String(data.activeInFile || '').toLowerCase();
+            if (chosen && (chosen === 'singleproduct' || chosen === 'multipleproducts' || chosen === 'affiliate')) {
+                setSiteModeSelectValue(chosen);
+                activeProductsMode = chosen;
+                configMode = chosen;
+                var pm = document.getElementById('owner-products-mode');
+                if (pm) pm.value = chosen;
+                document.querySelectorAll('[data-config-mode]').forEach(function(tab) {
+                    tab.classList.toggle('active', tab.dataset.configMode === chosen);
+                });
+                setConfigModeBanner(chosen);
+                try {
+                    var stats = await fetchStats(getAuthToken());
+                    renderStats(stats);
+                } catch (e) {}
+            }
+            setSiteSelectorStatus('Saved. Customers and server-side redirects will use this on the next page load.');
+        } catch (error) {
+            setSiteSelectorStatus(error.message || 'Unable to save site_selector.js', true);
+        }
+    }
+
+    function applySiteSelectorPreset(mode) {
+        var ta = document.getElementById('site-selector-editor-textarea');
+        if (!ta) return;
+        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : 'Affiliate');
+        var value = mode;
+        var commentS = mode === 'singleproduct' ? '' : '//';
+        var commentM = mode === 'multipleproducts' ? '' : '//';
+        var commentA = mode === 'affiliate' ? '' : '//';
+        var content = [
+            '/*',
+            '=========================================================',
+            '                WEBSITE MODE SELECTOR',
+            '=========================================================',
+            '',
+            'HOW TO USE:',
+            '1) Choose ONE mode below',
+            '2) Uncomment exactly ONE of the three lines (remove the leading //).',
+            '3) Keep the other two lines commented with //',
+            '4) Click SAVE — the Worker serves this to customers immediately.',
+            '',
+            'Modes:',
+            '- "singleproduct"    → One focused landing page, inline checkout',
+            '- "multipleproducts" → Store with multiple products + cart + checkout',
+            '- "affiliate"        → Showcase multiple products but link out externally',
+            '=========================================================',
+            '',
+            'Current applied preset: ' + label,
+            '=========================================================',
+            '*/',
+            '',
+            commentS + 'const WEBSITE_TYPE_SELECT = "singleproduct";',
+            commentM + 'const WEBSITE_TYPE_SELECT = "multipleproducts";',
+            commentA + 'const WEBSITE_TYPE_SELECT = "affiliate";',
+            ''
+        ].join('\n');
+        ta.value = content;
+        currentSiteSelectorContent = content;
+        setSiteSelectorStatus('Preset applied: ' + label + '. Click Save to apply to storefront.');
+    }
+
+    function initSiteSelectorEditor() {
+        var reload = document.getElementById('site-selector-reload-btn');
+        var saveBtn = document.getElementById('site-selector-save-btn');
+        var ta = document.getElementById('site-selector-editor-textarea');
+        if (reload) reload.addEventListener('click', loadSiteSelectorEditor);
+        if (saveBtn) saveBtn.addEventListener('click', saveSiteSelectorEditor);
+        if (ta) ta.addEventListener('change', function() {
+            setSiteSelectorStatus('Unsaved changes. Click Save to apply.');
+        });
+        document.querySelectorAll('[data-site-selector-preset]').forEach(function(btn) {
+            btn.addEventListener('click', function() { applySiteSelectorPreset(btn.dataset.siteSelectorPreset); });
+        });
     }
 
     async function saveConfigRaw(values) {
@@ -1705,6 +1839,7 @@
         initModeGate();
         initNavTabs();
         initProductsManagement();
+        initSiteSelectorEditor();
         loadDashboard();
     });
 })();

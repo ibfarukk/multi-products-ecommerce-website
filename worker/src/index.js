@@ -72,6 +72,14 @@ export default {
             return handleOwnerConfigSave(request, env);
         }
 
+        // Owner site_selector.js editor
+        if (path === '/api/owner/site-selector' && request.method === 'GET') {
+            return handleOwnerSiteSelector(request, env);
+        }
+        if (path === '/api/owner/site-selector' && request.method === 'PUT') {
+            return handleOwnerSiteSelectorSave(request, env);
+        }
+
         // Owner image upload to R2
         if (path === '/api/owner/upload' && request.method === 'POST') {
             return handleOwnerImageUpload(request, env);
@@ -1319,7 +1327,126 @@ async function handleOwnerConfigSave(request, env) {
     }
     siteConfigCache = { loadedAt: 0, key: '', value: null, promise: null };
     siteModeCache = { loadedAt: 0, value: 'singleproduct', promise: null };
+    // Clear site_selector override cache
+    siteSelectorOverrideCache = null;
     return jsonResponse({ success: true, mode: mode, config: config });
+}
+
+const SITE_SELECTOR_KV_KEY = 'site_selector_js_override';
+let siteSelectorOverrideCache = null;
+
+async function getStoredSiteSelectorOverride(env) {
+    if (siteSelectorOverrideCache !== null) return siteSelectorOverrideCache;
+    if (!env || !env.OWNER_STATS) return null;
+    try {
+        const raw = await env.OWNER_STATS.get(SITE_SELECTOR_KV_KEY, 'text');
+        siteSelectorOverrideCache = raw || null;
+    } catch (e) {
+        siteSelectorOverrideCache = null;
+    }
+    return siteSelectorOverrideCache;
+}
+
+async function readSiteSelectorRaw(env) {
+    try {
+        const override = await getStoredSiteSelectorOverride(env);
+        if (typeof override === 'string' && override.length > 0) {
+            return { text: override, source: 'kv' };
+        }
+    } catch (e) {}
+    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+        var response = null;
+        try { response = await env.ASSETS.fetch(new Request('http://localhost/js/site_selector.js')); }
+        catch (e0) { response = null; }
+        if (!response || !response.ok) {
+            try { response = await env.ASSETS.fetch('https://static.invalid/js/site_selector.js'); }
+            catch (e1) { response = null; }
+        }
+        if (response && response.ok) {
+            try {
+                const text = await response.text();
+                return { text: text, source: 'assets' };
+            } catch (e) {}
+        }
+    }
+    // Hardcoded default fallback if ASSETS fails entirely
+    const defaultText = [
+        '/*',
+        '=========================================================',
+        '                WEBSITE MODE SELECTOR',
+        '=========================================================',
+        '',
+        'HOW TO USE (Non-developer friendly):',
+        '1) Choose ONE mode below',
+        '2) Uncomment the line for the mode you want',
+        '3) Make sure the other two modes remain commented',
+        '',
+        'Available modes:',
+        '- "singleproduct"    → One product checkout (current template)',
+        '- "multipleproducts" → Store with multiple products + cart + checkout',
+        '- "affiliate"        → Multiple products but no checkout (links out)',
+        '=========================================================',
+        '*/',
+        '',
+        '//const WEBSITE_TYPE_SELECT = "singleproduct";',
+        'const WEBSITE_TYPE_SELECT = "multipleproducts";',
+        '//const WEBSITE_TYPE_SELECT = "affiliate";',
+        ''
+    ].join('\n');
+    return { text: defaultText, source: 'default' };
+}
+
+async function handleOwnerSiteSelector(request, env) {
+    const authorized = isOwnerAuthorized(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    try {
+        const read = await readSiteSelectorRaw(env);
+        const match = String(read.text || '').match(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/i);
+        const activeInFile = match ? match[1] : '';
+        return jsonResponse({
+            success: true,
+            content: read.text,
+            source: read.source,
+            activeInFile: activeInFile
+        });
+    } catch (err) {
+        return jsonResponse({ success: false, error: err && err.message ? err.message : 'Unable to read site_selector.js' }, 500);
+    }
+}
+
+async function handleOwnerSiteSelectorSave(request, env) {
+    const authorized = isOwnerAuthorized(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    if (!env || !env.OWNER_STATS) return jsonResponse({ success: false, error: 'Storage not configured' }, 503);
+    const body = await request.json().catch(function() { return null; });
+    var content = body && typeof body.content === 'string' ? body.content : '';
+    content = String(content).replace(/\r\n/g, '\n');
+    if (!/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']+["']\s*;?/i.test(content)) {
+        return jsonResponse({ success: false, error: 'site_selector.js must contain a valid `const WEBSITE_TYPE_SELECT = "...";` line.' }, 400);
+    }
+    // Also stamp KV WEBSITE_TYPE_SELECT mirror into all 3 config buckets so server-side redirects are immediate
+    const match = content.match(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/i);
+    const value = match ? normalizeSiteMode(match[1]) : '';
+    if (!value) return jsonResponse({ success: false, error: 'Invalid WEBSITE_TYPE_SELECT value' }, 400);
+    try {
+        await env.OWNER_STATS.put(SITE_SELECTOR_KV_KEY, content);
+        siteSelectorOverrideCache = content;
+        // Mirror WEBSITE_TYPE_SELECT to all three site-config buckets so getStoredSiteMode picks it up instantly.
+        const modes = ['singleproduct', 'multipleproducts', 'affiliate'];
+        for (const other of modes) {
+            try {
+                const existing = await getStoredConfig(env, other);
+                const next = Object.assign({}, existing || {}, { WEBSITE_TYPE_SELECT: value });
+                await env.OWNER_STATS.put('site-config-' + other, JSON.stringify(next));
+            } catch (e) {}
+        }
+        // Bust caches
+        siteConfigCache = { loadedAt: 0, key: '', value: null, promise: null };
+        siteModeCache = { loadedAt: 0, value: 'singleproduct', promise: null };
+        return jsonResponse({ success: true, activeInFile: value });
+    } catch (e) {
+        return jsonResponse({ success: false, error: e && e.message ? e.message : 'Unable to save site_selector.js' }, 500);
+    }
 }
 
 function unauthorizedResponse(error) {
@@ -1331,13 +1458,29 @@ function unauthorizedResponse(error) {
 
 async function handlePublicConfigAsset(request, env, path) {
     if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') return new Response('Not Found', { status: 404 });
-    const response = await env.ASSETS.fetch(request);
-    if (!response || !response.ok) return response;
-    let text = await response.text();
-    const activeMode = await getSiteMode(env);
+    let text;
+    let sourceAsset;
     if (path === '/js/site_selector.js') {
-        const source = text.replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
-        return new Response(source, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
+        try {
+            const override = await getStoredSiteSelectorOverride(env);
+            if (typeof override === 'string' && override.length > 0) {
+                text = override;
+                sourceAsset = 'kv';
+            }
+        } catch (e) {
+            text = null;
+        }
+    }
+    if (!text) {
+        const response = await env.ASSETS.fetch(request);
+        if (!response || !response.ok) return response;
+        text = await response.text();
+        sourceAsset = 'assets';
+    }
+    if (path === '/js/site_selector.js') {
+        const activeMode = await getSiteMode(env);
+        const source = String(text || '').replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
+        return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
     }
 
     const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
@@ -2110,14 +2253,39 @@ async function getStoredConfig(env, mode) {
 }
 
 async function getStoredSiteMode(env) {
+    // Highest priority: owner-edited site_selector.js override saved in KV
+    try {
+        const override = await getStoredSiteSelectorOverride(env);
+        if (typeof override === 'string' && override.length > 0) {
+            const cleaned = stripJsComments(override);
+            const matches = Array.from(String(cleaned || '').matchAll(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig));
+            if (matches.length) {
+                return normalizeSiteMode(matches[matches.length - 1][1]);
+            }
+        }
+    } catch (e) {
+        // fall through
+    }
     const config = await getStoredConfig(env, 'singleproduct');
     if (config && config.WEBSITE_TYPE_SELECT) return normalizeSiteMode(config.WEBSITE_TYPE_SELECT);
-    if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') return 'singleproduct';
-    const response = await env.ASSETS.fetch(new Request('http://internal/js/site_selector.js'));
-    if (!response || !response.ok) return 'singleproduct';
-    const text = stripJsComments(await response.text());
-    const matches = Array.from(String(text || '').matchAll(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig));
-    return normalizeSiteMode(matches.length ? matches[matches.length - 1][1] : 'singleproduct');
+    // Fallback: read static site_selector.js from ASSETS (fail-safe)
+    try {
+        if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+            var response = null;
+            try { response = await env.ASSETS.fetch(new Request('http://localhost/js/site_selector.js')); }
+            catch (e0) { response = null; }
+            if (!response || !response.ok) {
+                try { response = await env.ASSETS.fetch('https://static.invalid/js/site_selector.js'); }
+                catch (e1) { response = null; }
+            }
+            if (response && response.ok) {
+                const text = stripJsComments(await response.text());
+                const matches = Array.from(String(text || '').matchAll(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig));
+                if (matches.length) return normalizeSiteMode(matches[matches.length - 1][1]);
+            }
+        }
+    } catch (e) {}
+    return 'singleproduct';
 }
 
 async function getSiteConfigForMode(env, mode) {
