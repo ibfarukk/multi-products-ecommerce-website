@@ -478,7 +478,17 @@
                 setSubmitting(true);
                 submitManualOrder(payload, receipt)
                     .then(function() {
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1' + (selection && selection.pkg && selection.pkg.id ? ('&pkg=' + encodeURIComponent(String(selection.pkg.id))) : '');
+                        const extras = [
+                            'ref=' + encodeURIComponent(orderRef),
+                            'manual=1'
+                        ];
+                        if (selection && selection.pkg && selection.pkg.id) extras.push('pkg=' + encodeURIComponent(String(selection.pkg.id)));
+                        if (selection && selection.pkg && selection.pkg.title) extras.push('pkg_title=' + encodeURIComponent(String(selection.pkg.title)));
+                        if (selection && selection.totals && typeof selection.totals.total !== 'undefined') extras.push('amount=' + encodeURIComponent(String(selection.totals.total)));
+                        if (selection && selection.totals && typeof selection.totals.itemCount !== 'undefined') extras.push('qty=' + encodeURIComponent(String(selection.totals.itemCount || 1)));
+                        if (payload.currency) extras.push('currency=' + encodeURIComponent(String(payload.currency)));
+                        if (product && (product.title || product.id)) extras.push('product=' + encodeURIComponent(String(product.title || product.id)));
+                        window.location.href = 'success.html?' + extras.join('&');
                     })
                     .catch(function(error) {
                         showError(error && error.message ? error.message : 'Manual order submission failed.');
@@ -679,7 +689,17 @@
                 setInlineSubmitting(true);
                 submitManualOrder(payload, receipt)
                     .then(function() {
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1' + (totals && totals.package_id ? ('&pkg=' + encodeURIComponent(String(totals.package_id))) : '');
+                        var extras = [
+                            'ref=' + encodeURIComponent(orderRef),
+                            'manual=1'
+                        ];
+                        if (totals && totals.package_id) extras.push('pkg=' + encodeURIComponent(String(totals.package_id)));
+                        if (totals && totals.package_title) extras.push('pkg_title=' + encodeURIComponent(String(totals.package_title)));
+                        if (totals && typeof totals.amount !== 'undefined') extras.push('amount=' + encodeURIComponent(String(totals.amount)));
+                        if (totals && typeof totals.quantity !== 'undefined') extras.push('qty=' + encodeURIComponent(String(totals.quantity || 1)));
+                        if (payload.currency) extras.push('currency=' + encodeURIComponent(String(payload.currency)));
+                        if (totals && (totals.product || totals.product_title)) extras.push('product=' + encodeURIComponent(String(totals.product || totals.product_title || '')));
+                        window.location.href = 'success.html?' + extras.join('&');
                     })
                     .catch(function(error) {
                         showInlineError(error && error.message ? error.message : 'Manual order submission failed.');

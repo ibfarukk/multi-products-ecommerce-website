@@ -232,6 +232,13 @@
             const params = new URLSearchParams(window.location.search);
             const ref = String(params.get('ref') || '').trim();
             const pkgId = String(params.get('pkg') || '').trim();
+            const pkgTitle = String(params.get('pkg_title') || '').trim();
+            const productFromQuery = String(params.get('product') || '').trim();
+            const qtyFromQueryRaw = String(params.get('qty') || '').trim();
+            const qtyFromQuery = qtyFromQueryRaw && !isNaN(Number(qtyFromQueryRaw)) ? Number(qtyFromQueryRaw) : null;
+            const amountFromQueryRaw = String(params.get('amount') || '').trim();
+            const amountFromQuery = amountFromQueryRaw && !isNaN(Number(amountFromQueryRaw)) ? Number(amountFromQueryRaw) : null;
+            const currencyFromQuery = String(params.get('currency') || '').trim();
             const manualParam = String(params.get('manual') || '').trim().toLowerCase();
             const querySaysManual = manualParam === '1' || manualParam === 'true' || manualParam === 'yes';
             const isDigital = String(typeof PRODUCT_TYPE !== 'undefined' ? PRODUCT_TYPE : 'physical').toLowerCase() === 'digital';
@@ -252,6 +259,54 @@
                 return (BUSINESS && BUSINESS.currency ? BUSINESS.currency : '') + value.toLocaleString('en-NG');
             }
 
+            function resolveAmount(record) {
+                if (amountFromQuery != null) return amountFromQuery;
+                if (record && (typeof record.amount === 'number' || typeof record.amount === 'string') && Number(record.amount) > 0) return Number(record.amount);
+                // Package fallback for single product if we have one
+                if (pkgId && typeof PACKAGES !== 'undefined' && Array.isArray(PACKAGES)) {
+                    const p = PACKAGES.find(function(x) { return x && x.id === pkgId; });
+                    if (p && typeof p.price !== 'undefined' && Number(p.price) > 0) return Number(p.price);
+                }
+                if (typeof PRODUCT !== 'undefined' && typeof PRODUCT.price !== 'undefined' && Number(PRODUCT.price) > 0) return Number(PRODUCT.price);
+                return 0;
+            }
+
+            function resolveCurrency(record) {
+                if (currencyFromQuery) return currencyFromQuery;
+                if (record && record.currency) return String(record.currency);
+                if (typeof BUSINESS !== 'undefined' && BUSINESS.currencyCode) return String(BUSINESS.currencyCode);
+                return '';
+            }
+
+            function resolveQty(record) {
+                if (qtyFromQuery != null) return qtyFromQuery;
+                if (record && record.quantity) return Number(record.quantity);
+                if (pkgId && typeof PACKAGES !== 'undefined' && Array.isArray(PACKAGES)) {
+                    const p = PACKAGES.find(function(x) { return x && x.id === pkgId; });
+                    if (p && typeof p.quantity !== 'undefined' && Number(p.quantity) > 0) return Number(p.quantity);
+                }
+                return 1;
+            }
+
+            function resolveProductTitle(record) {
+                if (productFromQuery) return productFromQuery;
+                const t1 = record && (record.productTitle || record.product) ? String(record.productTitle || record.product) : '';
+                if (t1) return t1;
+                if (typeof PRODUCT !== 'undefined' && PRODUCT.name) return String(PRODUCT.name);
+                return '—';
+            }
+
+            function resolvePackageTitle(record) {
+                if (pkgTitle) return pkgTitle;
+                const t1 = record && record.packageTitle ? String(record.packageTitle) : '';
+                if (t1) return t1;
+                if (pkgId && typeof PACKAGES !== 'undefined' && Array.isArray(PACKAGES)) {
+                    const p = PACKAGES.find(function(x) { return x && x.id === pkgId; });
+                    if (p && p.title) return String(p.title);
+                }
+                return pkgId || '—';
+            }
+
             function setIconState(state) {
                 const iconBox = document.querySelector('.success-icon');
                 if (!iconBox) return;
@@ -269,18 +324,21 @@
                 iconBox.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' + svgPath + '</svg>';
             }
 
-            function renderManualBankDetails(record) {
+            function renderManualBankDetails(record, overrideAmount, overrideCurrency) {
                 const manualNote = document.getElementById('manual-note');
                 const manualBankDetails = document.getElementById('manual-bank-details');
                 const mp = typeof MANUAL_PAYMENT !== 'undefined' ? MANUAL_PAYMENT : null;
-                const exactAmount = formatTotal(record && record.amount ? record.amount : 0, record && record.currency ? record.currency : (BUSINESS ? BUSINESS.currencyCode : ''));
+                const effectiveAmount = typeof overrideAmount === 'number' ? overrideAmount : resolveAmount(record);
+                const effectiveCurrency = overrideCurrency || resolveCurrency(record);
+                const exactAmount = formatTotal(effectiveAmount, effectiveCurrency);
+                const orderRef = String((record && record.reference) || ref);
 
                 if (manualNote) {
                     const noteTitle = document.getElementById('manual-note-title');
                     const noteMessage = document.getElementById('manual-note-message');
                     if (noteTitle) noteTitle.textContent = 'Awaiting Payment Verification — Please Transfer the Exact Amount';
                     if (noteMessage) {
-                        const exactCopy = 'Transfer exactly <strong>' + exactAmount + '</strong> and quote Order Reference <strong>' + String(record && record.reference ? record.reference : ref) + '</strong> in the payment narration so we can match your transfer automatically.';
+                        const exactCopy = 'Transfer exactly <strong>' + exactAmount + '</strong> and quote Order Reference <strong>' + orderRef + '</strong> in the payment narration so we can match your transfer automatically.';
                         noteMessage.innerHTML = (mp && mp.noteMessage ? String(mp.noteMessage) + '<br><br>' : '') + exactCopy;
                     }
                     manualNote.style.display = 'block';
@@ -297,7 +355,7 @@
                     if (accountNumber) accountNumber.textContent = mp && mp.accountNumber ? String(mp.accountNumber) : 'Please contact support';
                     if (instructions) {
                         const baseInstructions = mp && mp.instructions ? String(mp.instructions) : 'Please complete your transfer using the bank details above and keep your payment receipt for reference.';
-                        const enforceCopy = '<br><br>⚠️ <strong>Transfer exactly ' + exactAmount + '.</strong> Any mismatch will delay order confirmation. Use Order Reference <strong>' + String(record && record.reference ? record.reference : ref) + '</strong> as your payment narration so we can identify your payment quickly.';
+                        const enforceCopy = '<br><br>⚠️ <strong>Transfer exactly ' + exactAmount + '.</strong> Any mismatch will delay order confirmation. Use Order Reference <strong>' + orderRef + '</strong> as your payment narration so we can identify your payment quickly.';
                         instructions.innerHTML = baseInstructions + enforceCopy;
                     }
                     if (deadline) deadline.textContent = mp && mp.paymentDeadline ? String(mp.paymentDeadline) : '';
@@ -305,22 +363,31 @@
                 }
             }
 
-            function showOrderDetails(record, isManualAwaiting) {
+            function showOrderDetails(record) {
                 const orderDetails = document.getElementById('order-details');
                 if (!orderDetails) return;
                 orderDetails.style.display = 'block';
 
-                const packageKey = String(record.packageId || pkgId || 'single');
-                const hasPackages = typeof PACKAGES !== 'undefined' && Array.isArray(PACKAGES) && PACKAGES.length;
-                const pkg = hasPackages ? (PACKAGES.find(function(p) { return p.id === packageKey; }) || PACKAGES[0]) : null;
-                const packageTitle = String(record.packageTitle || (pkg && pkg.title ? pkg.title : packageKey) || packageKey);
-                const productTitle = String(record.productTitle || record.product || (typeof PRODUCT !== 'undefined' && PRODUCT.name ? PRODUCT.name : '') || '');
+                const effectiveAmount = resolveAmount(record);
+                const effectiveCurrency = resolveCurrency(record);
+                const effectiveQty = resolveQty(record);
+                const productTitle = resolveProductTitle(record);
+                const packageTitle = resolvePackageTitle(record);
 
-                document.getElementById('order-ref').textContent = String(record.reference || ref);
-                document.getElementById('order-product').textContent = productTitle || '—';
-                document.getElementById('order-package').textContent = packageTitle || packageKey;
-                document.getElementById('order-quantity').textContent = String(record.quantity || (pkg && pkg.quantity ? pkg.quantity : 1));
-                document.getElementById('order-total').textContent = formatTotal(record.amount || (pkg && pkg.price ? pkg.price : 0), record.currency || (BUSINESS ? BUSINESS.currencyCode : ''));
+                document.getElementById('order-ref').textContent = String((record && record.reference) || ref);
+                document.getElementById('order-product').textContent = productTitle;
+                document.getElementById('order-package').textContent = packageTitle;
+                document.getElementById('order-quantity').textContent = String(effectiveQty || 1);
+                const orderTotalEl = document.getElementById('order-total');
+                if (orderTotalEl) {
+                    if (effectiveAmount && effectiveAmount > 0) {
+                        orderTotalEl.textContent = formatTotal(effectiveAmount, effectiveCurrency);
+                        orderTotalEl.style.color = '';
+                    } else {
+                        orderTotalEl.textContent = 'As shown at checkout';
+                        orderTotalEl.style.color = 'var(--primary)';
+                    }
+                }
 
                 const itemsBox = document.getElementById('order-items');
                 const items = record && Array.isArray(record.items) ? record.items : [];
@@ -354,7 +421,7 @@
                             lineMeta.style.color = 'rgba(0,0,0,0.65)';
                             lineMeta.style.fontSize = '0.9rem';
                             lineMeta.style.marginTop = '6px';
-                            lineMeta.textContent = String(item.packageTitle || item.packageId || '') + ' · Qty ' + String(item.qty || item.quantity || 0) + ' · ' + String(item.lineTotal || '') + ' ' + String(record.currency || '');
+                            lineMeta.textContent = String(item.packageTitle || item.packageId || '') + ' · Qty ' + String(item.qty || item.quantity || 0) + ' · ' + String(item.lineTotal || '') + ' ' + String((record && record.currency) || effectiveCurrency || '');
 
                             row.appendChild(lineTitle);
                             row.appendChild(lineMeta);
@@ -405,19 +472,16 @@
 
                 if (treatAsManual) {
                     setIconState('manual');
+                    const fallbackAmount = resolveAmount(null);
+                    const fallbackCurrency = resolveCurrency(null);
+                    const fallbackTotal = formatTotal(fallbackAmount, fallbackCurrency);
                     if (successTitle) successTitle.textContent = 'ORDER PLACED — AWAITING PAYMENT';
-                    const amountLine = typeof BUSINESS !== 'undefined' && BUSINESS.currency ? ('Your total is ' + formatTotal(0, BUSINESS.currencyCode).replace('0', '') + 'shown on the previous page.') : '';
-                    if (successMessage) successMessage.textContent = 'Thank you — we received your order details successfully. Complete the bank transfer below using the EXACT amount and narration required, then your order will be confirmed within minutes after verification. ' + amountLine;
-                    if (orderDetails) {
-                        // Still show ref even if record missing — use ref from query param so customer has their Order ID
-                        orderDetails.style.display = 'block';
-                        document.getElementById('order-ref').textContent = String(ref || '');
-                        document.getElementById('order-product').textContent = 'Check your order summary on the previous page';
-                        document.getElementById('order-package').textContent = pkgId || '—';
-                        document.getElementById('order-quantity').textContent = '—';
-                        document.getElementById('order-total').textContent = 'As shown at checkout';
+                    if (successMessage) {
+                        successMessage.textContent = 'Thank you — we received your order details successfully. Please make a bank transfer of exactly ' + fallbackTotal + ' using the details below, quoting Order Reference ' + String(ref) + ' as your payment narration. Your order will be confirmed within minutes after your transfer is verified.';
                     }
-                    renderManualBankDetails({ reference: ref, amount: 0, currency: BUSINESS ? BUSINESS.currencyCode : '' });
+                    // Use full details card even in fallback, so they have everything.
+                    showOrderDetails(null);
+                    renderManualBankDetails(null, fallbackAmount, fallbackCurrency);
                     if (typeof BUSINESS !== 'undefined' && BUSINESS.name) {
                         document.title = 'Order Placed Awaiting Payment | ' + BUSINESS.name;
                     }
@@ -448,7 +512,6 @@
                 })
                 .then(function(data) {
                     const record = data && data.record ? data.record : null;
-                    const networkOk = !!data && data.success !== undefined;
 
                     // Handle transient / parse failures for manual orders by query hint
                     if ((!data || !data.success || !record) && querySaysManual) {
@@ -474,21 +537,24 @@
                         }
                     }
 
-                    showOrderDetails(record, isManualAwaiting);
+                    showOrderDetails(record);
 
                     const successTitle = document.getElementById('success-title');
                     const successMessage = document.getElementById('success-message');
+                    const effectiveAmount = resolveAmount(record);
+                    const effectiveCurrency = resolveCurrency(record);
+                    const fallbackTotal = formatTotal(effectiveAmount, effectiveCurrency);
 
                     if (isManualAwaiting) {
                         setIconState('manual');
                         if (isDigital) {
                             if (successTitle) successTitle.textContent = 'ORDER PLACED — AWAITING PAYMENT';
-                            if (successMessage) successMessage.textContent = 'Thank you for your order. Your digital product will be sent immediately after we verify your bank transfer.';
+                            if (successMessage) successMessage.textContent = 'Thank you for your order. Transfer exactly ' + fallbackTotal + ' using the bank details below. Your digital product will be sent immediately after we verify your transfer.';
                         } else {
                             if (successTitle) successTitle.textContent = 'ORDER PLACED — AWAITING PAYMENT';
-                            if (successMessage) successMessage.textContent = 'Thank you for your order. Once your bank transfer is verified, we will process and prepare your shipment.';
+                            if (successMessage) successMessage.textContent = 'Thank you for your order. Transfer exactly ' + fallbackTotal + ' using the bank details below. Once verified, we will process and prepare your shipment.';
                         }
-                        renderManualBankDetails(record);
+                        renderManualBankDetails(record, effectiveAmount, effectiveCurrency);
                     } else {
                         setIconState('paid');
                         if (isDigital) {

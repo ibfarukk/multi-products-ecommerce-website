@@ -475,7 +475,17 @@
                         if (window.PMELAB_CART && typeof window.PMELAB_CART.clear === 'function') {
                             window.PMELAB_CART.clear();
                         }
-                        window.location.href = 'success.html?ref=' + encodeURIComponent(orderRef) + '&manual=1&pkg=cart';
+                        const extras = [
+                            'ref=' + encodeURIComponent(orderRef),
+                            'manual=1',
+                            'pkg=cart',
+                            'pkg_title=' + encodeURIComponent('Cart')
+                        ];
+                        if (typeof cartTotals.total !== 'undefined') extras.push('amount=' + encodeURIComponent(String(cartTotals.total)));
+                        if (typeof cartTotals.itemCount !== 'undefined') extras.push('qty=' + encodeURIComponent(String(cartTotals.itemCount || 1)));
+                        if (payload.currency) extras.push('currency=' + encodeURIComponent(String(payload.currency)));
+                        extras.push('product=' + encodeURIComponent('Cart order'));
+                        window.location.href = 'success.html?' + extras.join('&');
                     })
                     .catch(function(error) {
                         showError(error && error.message ? error.message : 'Manual order submission failed.');
