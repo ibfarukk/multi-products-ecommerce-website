@@ -992,7 +992,33 @@
                     image: image,
                     images: Array.isArray(p.images) ? p.images.map(String) : (image ? [image] : []),
                     specs: Array.isArray(p.specs) ? p.specs.map(function(s) { return { label: String((s && s.label) || ''), value: String((s && s.value) || '') }; }) : [],
-                    packages: Array.isArray(p.packages) ? p.packages.map(function(pkg) { return { id: String((pkg && pkg.id) || ''), title: String((pkg && pkg.title) || ''), price: Number((pkg && pkg.price) || 0) }; }) : []
+                    packages: Array.isArray(p.packages) ? p.packages.map(function(pkg) { return { id: String((pkg && pkg.id) || ''), title: String((pkg && pkg.title) || ''), price: Number((pkg && pkg.price) || 0) }; }) : [],
+                    price: Number(p.price || ((Array.isArray(p.packages) && p.packages[0] && p.packages[0].price != null) ? Number(p.packages[0].price) : 0))
+                };
+            });
+        }
+        if (mode === 'affiliate') {
+            var items = Array.isArray(values.AFFILIATE_PRODUCTS) ? values.AFFILIATE_PRODUCTS : [];
+            return items.map(function(raw, index) {
+                var p = raw && typeof raw === 'object' ? raw : {};
+                var image = String(p.image || (Array.isArray(p.images) && p.images[0] ? p.images[0] : '') || '');
+                return {
+                    __kind: 'affiliate',
+                    __index: index,
+                    id: String(p.id || 'affiliate-product-' + index),
+                    title: String(p.title || 'Untitled'),
+                    shortTitle: '',
+                    description: String(p.description || ''),
+                    longDescription: String(p.longDescription || ''),
+                    productType: 'affiliate',
+                    shippingFee: 0,
+                    image: image,
+                    images: Array.isArray(p.images) ? p.images.map(String) : (image ? [image] : []),
+                    specs: Array.isArray(p.specs) ? p.specs.map(function(s) { return { label: String((s && s.label) || ''), value: String((s && s.value) || '') }; }) : [],
+                    packages: [],
+                    price: Number(p.price || 0),
+                    affiliateUrl: String(p.affiliateUrl || ''),
+                    buttonText: String(p.buttonText || 'Buy on Vendor')
                 };
             });
         }
@@ -1042,6 +1068,16 @@
         return 'background-image:url(\'' + String(src).replace(/'/g, '\\\'') + '\');';
     }
 
+    function formatCurrency(amount) {
+        var value = Number(amount || 0);
+        try {
+            if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+                return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
+            }
+        } catch (e) {}
+        return '₦' + String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     function renderProductsList() {
         var productsView = document.getElementById('owner-products-view');
         var editorView = document.getElementById('owner-product-editor-view');
@@ -1057,13 +1093,7 @@
         var isSingle = activeProductsMode === 'singleproduct';
         var isAffiliate = activeProductsMode === 'affiliate';
 
-        if (addBtn) addBtn.style.display = (isSingle || isAffiliate) ? 'none' : '';
-
-        if (isAffiliate) {
-            productsView.innerHTML = '<div class="owner-products-empty">Affiliate template does not have a product catalog. Open the Settings tab to edit AFFILIATE_PRODUCTS and raw template fields.</div>';
-            setProductsStatus('Affiliate template. Use Settings for raw configuration.');
-            return;
-        }
+        if (addBtn) addBtn.style.display = isSingle ? 'none' : '';
 
         if (!products.length) {
             productsView.innerHTML = '<div class="owner-products-empty">No products yet. Click <strong>+ Add product</strong> to create your first one.</div>';
@@ -1093,9 +1123,17 @@
             pid.textContent = 'ID: ' + product.id;
             var meta = document.createElement('div');
             meta.className = 'owner-product-meta';
-            meta.textContent = (product.packages.length ? (product.packages.length + ' package' + (product.packages.length > 1 ? 's' : '')) : '0 packages')
-                + ' · ' + (product.images.length ? (product.images.length + ' image' + (product.images.length > 1 ? 's' : '')) : '0 images')
-                + ' · ' + (product.productType || 'physical');
+            if (isAffiliate) {
+                var priceText = product.price ? formatCurrency(product.price) : '';
+                meta.textContent = (priceText ? (priceText + ' · ') : '')
+                    + (product.images.length ? (product.images.length + ' image' + (product.images.length > 1 ? 's' : '')) : '0 images')
+                    + ' · affiliate'
+                    + (product.affiliateUrl ? (' · ' + product.affiliateUrl) : '');
+            } else {
+                meta.textContent = (product.packages.length ? (product.packages.length + ' package' + (product.packages.length > 1 ? 's' : '')) : '0 packages')
+                    + ' · ' + (product.images.length ? (product.images.length + ' image' + (product.images.length > 1 ? 's' : '')) : '0 images')
+                    + ' · ' + (product.productType || 'physical');
+            }
 
             body.appendChild(title);
             body.appendChild(pid);
@@ -1142,7 +1180,9 @@
         } catch (error) {
             console.warn('R2 delete partial failure:', error);
         }
-        if (Array.isArray(configValues.PRODUCTS)) {
+        if (activeProductsMode === 'affiliate') {
+            if (Array.isArray(configValues.AFFILIATE_PRODUCTS)) configValues.AFFILIATE_PRODUCTS.splice(index, 1);
+        } else if (Array.isArray(configValues.PRODUCTS)) {
             configValues.PRODUCTS.splice(index, 1);
         }
         configMode = activeProductsMode;
@@ -1422,9 +1462,12 @@
         if (!editorView) return;
 
         var isSingle = activeProductsMode === 'singleproduct';
+        var isAffiliate = activeProductsMode === 'affiliate';
+        var modeLabel = isAffiliate ? 'Affiliate template' : (isSingle ? 'Single-product template' : 'Multi-product template');
         var coverImage = product.images && product.images.length ? product.images[0] : (product.image || '');
         editorDraft = {
             isSingle: isSingle,
+            isAffiliate: isAffiliate,
             index: index,
             sourceId: product.id,
             removedImages: new Set()
@@ -1433,7 +1476,7 @@
         var html = '';
         html += '<div class="owner-editor-header">';
         html += '<div><h2>' + (isSingle ? 'Edit product details' : ('Edit ' + String(product.title || product.id))) + '</h2>';
-        html += '<div class="owner-editor-subheader">' + (isSingle ? 'Single-product template' : ('Multi-product template · index ' + index)) + '</div></div>';
+        html += '<div class="owner-editor-subheader">' + modeLabel + (isAffiliate ? '' : (' · index ' + index)) + '</div></div>';
         html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
         html += '<button type="button" class="btn btn-secondary" id="editor-cancel">Back to products</button>';
         html += '</div></div>';
@@ -1443,11 +1486,17 @@
         html += '<h3>1. Product info</h3>';
         html += '<p class="hint">Basic product details. IDs are used in URLs and should be short, lowercase with hyphens.</p>';
         html += '<div class="owner-editor-grid">';
-        html += fieldHtml('editor-field-id', 'ID (slug)', isSingle ? String(product.id || 'single-main-product') : String(product.id || ''), 'text', isSingle);
+        html += fieldHtml('editor-field-id', 'ID (slug)', String(product.id || ''), 'text', isSingle);
         html += fieldHtml('editor-field-title', 'Title', String(product.title || ''));
         html += fieldHtml('editor-field-shortTitle', 'Short title', String(product.shortTitle || ''));
-        html += fieldHtml('editor-field-productType', 'Product type', String(product.productType || 'physical'), 'text', false, '<datalist id="editor-product-types"><option value="physical"></option><option value="digital"></option></datalist>', 'list="editor-product-types"');
-        html += fieldHtml('editor-field-shippingFee', 'Shipping fee (flat amount)', String(product.shippingFee || 0), 'number');
+        if (isAffiliate) {
+            html += fieldHtml('editor-field-price', 'Price', String(product.price || 0), 'number');
+            html += fieldHtml('editor-field-affiliateUrl', 'Affiliate URL (customers are sent here)', String(product.affiliateUrl || ''));
+            html += fieldHtml('editor-field-buttonText', 'Button text (e.g. Buy on Vendor)', String(product.buttonText || 'Buy on Vendor'));
+        } else {
+            html += fieldHtml('editor-field-productType', 'Product type', String(product.productType || 'physical'), 'text', false, '<datalist id="editor-product-types"><option value="physical"></option><option value="digital"></option></datalist>', 'list="editor-product-types"');
+            html += fieldHtml('editor-field-shippingFee', 'Shipping fee (flat amount)', String(product.shippingFee || 0), 'number');
+        }
         html += '</div>';
         html += textareaHtml('editor-field-description', 'Short description (card summary)', String(product.description || ''));
         html += textareaHtml('editor-field-longDescription', 'Long description (product page body)', String(product.longDescription || ''));
@@ -1475,14 +1524,16 @@
         html += '<div class="owner-editor-table-actions"><button type="button" class="btn btn-secondary" id="editor-add-spec">+ Add specification</button></div>';
         html += '</div>';
 
-        // Section 4: Packages
-        html += '<div class="owner-editor-section">';
-        html += '<h3>4. Packages &amp; pricing</h3>';
-        html += '<p class="hint">Each package is a purchasable variant: id, title, and price. Leave price at 0 for free items.</p>';
-        html += '<table class="owner-editor-table"><thead><tr><th style="width:24%;">Package ID</th><th>Title</th><th style="width:22%;">Price</th><th style="width:100px;"></th></tr></thead>';
-        html += '<tbody id="editor-packages-body"></tbody></table>';
-        html += '<div class="owner-editor-table-actions"><button type="button" class="btn btn-secondary" id="editor-add-package">+ Add package</button></div>';
-        html += '</div>';
+        if (!isAffiliate) {
+            // Section 4: Packages
+            html += '<div class="owner-editor-section">';
+            html += '<h3>4. Packages &amp; pricing</h3>';
+            html += '<p class="hint">Each package is a purchasable variant: id, title, and price. Leave price at 0 for free items.</p>';
+            html += '<table class="owner-editor-table"><thead><tr><th style="width:24%;">Package ID</th><th>Title</th><th style="width:22%;">Price</th><th style="width:100px;"></th></tr></thead>';
+            html += '<tbody id="editor-packages-body"></tbody></table>';
+            html += '<div class="owner-editor-table-actions"><button type="button" class="btn btn-secondary" id="editor-add-package">+ Add package</button></div>';
+            html += '</div>';
+        }
 
         html += '<div class="owner-editor-footer">';
         html += '<span class="owner-save-status" id="editor-save-status" role="status"></span>';
@@ -1501,9 +1552,11 @@
         (product.specs || []).forEach(function(spec) { addSpecRow(spec.label, spec.value); });
         if (!(product.specs || []).length) addSpecRow('', '');
 
-        // Render packages
-        (product.packages || []).forEach(function(pkg) { addPackageRow(pkg.id, pkg.title, pkg.price); });
-        if (!(product.packages || []).length) addPackageRow('', '', 0);
+        // Render packages (single/multi only)
+        if (!isAffiliate) {
+            (product.packages || []).forEach(function(pkg) { addPackageRow(pkg.id, pkg.title, pkg.price); });
+            if (!(product.packages || []).length) addPackageRow('', '', 0);
+        }
 
         // Bindings
         document.getElementById('editor-cancel').addEventListener('click', closeProductEditor);
@@ -1511,11 +1564,12 @@
         document.getElementById('editor-save').addEventListener('click', saveProductEditor);
 
         document.getElementById('editor-add-spec').addEventListener('click', function() { addSpecRow('', ''); });
-        document.getElementById('editor-add-package').addEventListener('click', function() { addPackageRow('', '', 0); });
+        var addPkgBtn = document.getElementById('editor-add-package');
+        if (addPkgBtn) addPkgBtn.addEventListener('click', function() { addPackageRow('', '', 0); });
 
         var fileInput = document.getElementById('editor-images-file-input');
         document.getElementById('editor-upload-images').addEventListener('click', function() { fileInput.click(); });
-        fileInput.addEventListener('change', handleEditorImageFilesSelected);
+        if (fileInput) fileInput.addEventListener('change', handleEditorImageFilesSelected);
     }
 
     function closeProductEditor() {
@@ -1685,9 +1739,6 @@
             if (!String(title || '').trim()) throw new Error('Product title is required.');
             if (!String(newId || '').trim()) throw new Error('Product ID is required.');
             var shortTitle = val('editor-field-shortTitle');
-            var productType = val('editor-field-productType') || 'physical';
-            var shippingFee = val('editor-field-shippingFee');
-            shippingFee = shippingFee === '' ? 0 : Number(shippingFee);
             var description = val('editor-field-description');
             var longDescription = val('editor-field-longDescription');
 
@@ -1697,7 +1748,14 @@
             if (!image && images[0]) image = images[0];
 
             var specs = collectSpecsFromView();
-            var packages = collectPackagesFromView();
+            var packages = editorDraft.isAffiliate ? [] : collectPackagesFromView();
+
+            var productType = editorDraft.isAffiliate ? 'affiliate' : (val('editor-field-productType') || 'physical');
+            var shippingFee = editorDraft.isAffiliate ? 0 : val('editor-field-shippingFee');
+            shippingFee = shippingFee === '' ? 0 : Number(shippingFee);
+            var price = editorDraft.isAffiliate ? Number(val('editor-field-price') || 0) : 0;
+            var affiliateUrl = editorDraft.isAffiliate ? String(val('editor-field-affiliateUrl') || '') : '';
+            var buttonText = editorDraft.isAffiliate ? String(val('editor-field-buttonText') || 'Buy on Vendor') : '';
 
             // 1. Purge removed R2 images
             var removed = Array.from(editorDraft.removedImages || []).filter(Boolean);
@@ -1722,16 +1780,8 @@
                     coverImage: image,
                     image: image
                 });
-                var nextImages = images.map(function(u) {
-                    return { enabled: true, file: u };
-                });
-                if (configValues.PRODUCT_IMAGES && Array.isArray(configValues.PRODUCT_IMAGES)) {
-                    // merge the enabled+ file shape; overwrite for simplicity
-                }
-                configValues.PRODUCT_IMAGES = nextImages;
-                // specs
+                configValues.PRODUCT_IMAGES = images.map(function(u) { return { enabled: true, file: u }; });
                 configValues.SPECIFICATIONS = specs.slice();
-                // packages (preserve existing keys like quantity, oldPrice from existing matching by id)
                 var existingPackages = Array.isArray(configValues.PACKAGES) ? configValues.PACKAGES : [];
                 configValues.PACKAGES = packages.map(function(pkg) {
                     var existing = existingPackages.find(function(p) { return p && String(p.id) === String(pkg.id); });
@@ -1742,6 +1792,26 @@
                         quantity: (existing && existing.quantity != null) ? existing.quantity : 1
                     });
                 });
+            } else if (editorDraft.isAffiliate) {
+                if (!Array.isArray(configValues.AFFILIATE_PRODUCTS)) configValues.AFFILIATE_PRODUCTS = [];
+                var updatedAffiliate = {
+                    id: newId,
+                    title: title,
+                    description: description,
+                    longDescription: longDescription,
+                    price: price,
+                    image: image,
+                    images: images.slice(),
+                    specs: specs.slice(),
+                    affiliateUrl: affiliateUrl,
+                    buttonText: buttonText
+                };
+                if (editorDraft.index >= 0 && editorDraft.index < configValues.AFFILIATE_PRODUCTS.length) {
+                    configValues.AFFILIATE_PRODUCTS[editorDraft.index] = updatedAffiliate;
+                } else {
+                    // Newest affiliate products show first
+                    configValues.AFFILIATE_PRODUCTS.unshift(updatedAffiliate);
+                }
             } else {
                 if (!Array.isArray(configValues.PRODUCTS)) configValues.PRODUCTS = [];
                 var updated = {
@@ -1760,7 +1830,8 @@
                 if (editorDraft.index >= 0 && editorDraft.index < configValues.PRODUCTS.length) {
                     configValues.PRODUCTS[editorDraft.index] = updated;
                 } else {
-                    configValues.PRODUCTS.push(updated);
+                    // Newest products show first
+                    configValues.PRODUCTS.unshift(updated);
                 }
             }
 
@@ -1794,38 +1865,75 @@
             setProductsStatus(ok ? (target + ' applied.') : 'Unable to apply ' + target, !ok);
         });
         if (addBtn) addBtn.addEventListener('click', function() {
-            if (activeProductsMode === 'singleproduct' || activeProductsMode === 'affiliate') return;
-            var blank = {
-                __kind: 'multi',
-                __index: (Array.isArray(activeProductsConfig.PRODUCTS) ? activeProductsConfig.PRODUCTS.length : 0),
-                id: slugIdFromTitle('New Product'),
-                title: 'New Product',
-                shortTitle: '',
-                description: '',
-                longDescription: '',
-                productType: 'physical',
-                shippingFee: 0,
-                image: '',
-                images: [],
-                specs: [{ label: '', value: '' }],
-                packages: [{ id: 'standard', title: 'Standard', price: 0 }]
-            };
-            if (!Array.isArray(activeProductsConfig.PRODUCTS)) configValues.PRODUCTS = [];
-            configValues.PRODUCTS.push({
-                id: blank.id,
-                title: blank.title,
-                shortTitle: blank.shortTitle,
-                description: blank.description,
-                longDescription: blank.longDescription,
-                productType: blank.productType,
-                shippingFee: blank.shippingFee,
-                image: blank.image,
-                images: [],
-                specs: [{ label: '', value: '' }],
-                packages: [{ id: 'standard', title: 'Standard', price: 0 }]
-            });
+            if (activeProductsMode === 'singleproduct') return;
+            var isAffiliate = activeProductsMode === 'affiliate';
+            var slug = slugIdFromTitle('New Product');
+            var blank;
+            if (isAffiliate) {
+                blank = {
+                    __kind: 'affiliate',
+                    __index: (Array.isArray(activeProductsConfig.AFFILIATE_PRODUCTS) ? activeProductsConfig.AFFILIATE_PRODUCTS.length : 0),
+                    id: slug,
+                    title: 'New Product',
+                    shortTitle: '',
+                    description: '',
+                    longDescription: '',
+                    productType: 'affiliate',
+                    shippingFee: 0,
+                    image: '',
+                    images: [],
+                    specs: [{ label: '', value: '' }],
+                    packages: [],
+                    price: 0,
+                    affiliateUrl: '',
+                    buttonText: 'Buy on Vendor'
+                };
+                if (!Array.isArray(configValues.AFFILIATE_PRODUCTS)) configValues.AFFILIATE_PRODUCTS = [];
+                configValues.AFFILIATE_PRODUCTS.unshift({
+                    id: blank.id,
+                    title: blank.title,
+                    description: blank.description,
+                    longDescription: blank.longDescription,
+                    price: 0,
+                    image: '',
+                    images: [],
+                    specs: [{ label: '', value: '' }],
+                    affiliateUrl: '',
+                    buttonText: 'Buy on Vendor'
+                });
+            } else {
+                blank = {
+                    __kind: 'multi',
+                    __index: (Array.isArray(activeProductsConfig.PRODUCTS) ? activeProductsConfig.PRODUCTS.length : 0),
+                    id: slug,
+                    title: 'New Product',
+                    shortTitle: '',
+                    description: '',
+                    longDescription: '',
+                    productType: 'physical',
+                    shippingFee: 0,
+                    image: '',
+                    images: [],
+                    specs: [{ label: '', value: '' }],
+                    packages: [{ id: 'standard', title: 'Standard', price: 0 }]
+                };
+                if (!Array.isArray(configValues.PRODUCTS)) configValues.PRODUCTS = [];
+                configValues.PRODUCTS.unshift({
+                    id: blank.id,
+                    title: blank.title,
+                    shortTitle: blank.shortTitle,
+                    description: blank.description,
+                    longDescription: blank.longDescription,
+                    productType: blank.productType,
+                    shippingFee: blank.shippingFee,
+                    image: blank.image,
+                    images: [],
+                    specs: [{ label: '', value: '' }],
+                    packages: [{ id: 'standard', title: 'Standard', price: 0 }]
+                });
+            }
             activeProductsConfig = configValues;
-            openProductEditor(blank, blank.__index);
+            openProductEditor(blank, 0);
         });
     }
 

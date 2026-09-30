@@ -1485,27 +1485,36 @@ async function handlePublicConfigAsset(request, env, path) {
 
     const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
     const override = await getStoredConfig(env, mode);
-    if (!override) return response;
-    const primitiveNames = ['API_BASE_URL', 'PRODUCT_TYPE'];
-    primitiveNames.forEach(function(key) {
-        if (override[key] === undefined) return;
-        const value = JSON.stringify(override[key]);
-        const pattern = new RegExp('const\\s+' + key + '\\s*=\\s*[^;]+;?', 'i');
-        text = text.replace(pattern, 'const ' + key + ' = ' + value + ';');
-    });
-    const safeNames = [
-        'BUSINESS', 'BRAND', 'PRODUCT', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'FEATURES', 'SPECIFICATIONS', 'PACKAGES',
-        'DELIVERY', 'GUARANTEE', 'WHY_CHOOSE', 'TESTIMONIALS', 'FAQ', 'WHATSAPP_NUMBERS', 'PAYMENT', 'MANUAL_PAYMENT',
-        'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
-        'SOCIAL_PROOF_GALLERY', 'COMPANY', 'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA',
-        'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
-    ];
-    const assignments = Object.keys(override).filter(function(key) {
-        return safeNames.indexOf(key) >= 0;
-    }).map(function(key) {
-        return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
-    }).join('\n');
-    return new Response(text + '\n' + assignments, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
+    const contentType = 'application/javascript';
+    const noStoreHeaders = { 'Content-Type': contentType, 'Cache-Control': 'no-store, private, no-cache, must-revalidate' };
+    if (override) {
+        const primitiveNames = ['API_BASE_URL', 'PRODUCT_TYPE'];
+        primitiveNames.forEach(function(key) {
+            if (override[key] === undefined) return;
+            const value = JSON.stringify(override[key]);
+            const pattern = new RegExp('const\\s+' + key + '\\s*=\\s*[^;]+;?', 'i');
+            text = text.replace(pattern, 'const ' + key + ' = ' + value + ';');
+        });
+        const safeNames = [
+            'BUSINESS', 'BRAND', 'PRODUCT', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'FEATURES', 'SPECIFICATIONS', 'PACKAGES',
+            'DELIVERY', 'GUARANTEE', 'WHY_CHOOSE', 'TESTIMONIALS', 'FAQ', 'WHATSAPP_NUMBERS', 'PAYMENT', 'MANUAL_PAYMENT',
+            'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
+            'SOCIAL_PROOF_GALLERY', 'COMPANY', 'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA',
+            'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
+        ];
+        const assignments = Object.keys(override).filter(function(key) {
+            return safeNames.indexOf(key) >= 0;
+        }).map(function(key) {
+            return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
+        }).join('\n');
+        return new Response(text + '\n' + assignments, { headers: noStoreHeaders });
+    }
+    // No override stored yet: return the static content with no-store so subsequent overrides immediately propagate (no stale CDN copies).
+    try {
+        return new Response(text, { headers: noStoreHeaders });
+    } catch (e) {
+        return new Response(text, { headers: { 'Content-Type': contentType } });
+    }
 }
 
 async function handleOwnerOrderLookup(request, env) {
