@@ -553,6 +553,114 @@
             .owner-editor-footer .btn { flex: 1 1 auto; }
             .owner-nav-tab { padding: 12px 14px; font-size: 0.88rem; }
         }
+
+        /* =========================================================
+           PROFESSIONAL DASHBOARD: APP SHELL + SIDEBAR + SUB-NAV
+           ========================================================= */
+        .owner-page { background: #f4f6fb; }
+        #owner-dashboard-view { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .owner-dashboard-header {
+            background: #fff; border-bottom: 1px solid var(--border); padding: 12px 18px;
+            display: flex; justify-content: space-between; align-items: center; gap: 14px;
+            flex-wrap: wrap;
+        }
+        .owner-dashboard-header .owner-dashboard-title { display:flex; align-items:center; gap:10px; }
+        .owner-dashboard-header .owner-dashboard-title h1 { margin: 0; font-size: 1.1rem; }
+        .owner-dashboard-header .owner-dashboard-title p { margin: 0; font-size: .8rem; color: var(--muted); }
+        .owner-dashboard-header .owner-actions { margin: 0; }
+        .owner-dashboard-header .owner-title { padding: 0; margin: 0; display:none; }
+        .owner-app-shell { flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden; }
+        .owner-sidebar-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
+            z-index: 40; opacity: 0; transition: opacity .2s ease;
+        }
+        .owner-sidebar-overlay.is-open { display: block; opacity: 1; }
+        .owner-sidebar {
+            width: 248px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border);
+            padding: 16px 10px; overflow-y: auto; z-index: 45; position: relative;
+        }
+        .owner-sidebar-brand {
+            display: none; font-weight: 900; font-size: 1rem; padding: 8px 10px 14px;
+            border-bottom: 1px solid var(--border-light); margin-bottom: 10px;
+        }
+        .owner-sidebar-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+        .owner-sidebar-link {
+            display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent;
+            padding: 11px 12px; border-radius: 12px; cursor: pointer; color: var(--text-muted, #475569);
+            font-weight: 700; font-size: .92rem; text-align: left; transition: all .15s ease;
+        }
+        .owner-sidebar-link:hover { background: #f1f5f9; color: var(--text); }
+        .owner-sidebar-link.active { background: var(--primary, #0f766e); color: #fff; box-shadow: 0 6px 18px -8px rgba(15, 118, 110, .6); }
+        .owner-sidebar-link .ico { width: 22px; font-size: 1.05rem; display: inline-flex; justify-content: center; }
+        .owner-topbar {
+            display: none; background: #fff; border-bottom: 1px solid var(--border);
+            padding: 10px 14px; position: sticky; top: 0; z-index: 30;
+            align-items: center; justify-content: space-between;
+        }
+        .owner-topbar.is-visible { display: flex; }
+        .owner-topbar .owner-menu-toggle {
+            border: 0; background: #f1f5f9; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer;
+        }
+        .owner-main-col {
+            flex: 1 1 auto; overflow-y: auto; padding: 18px; min-width: 0;
+        }
+        .owner-main-col .owner-meta { margin: 0 0 10px; }
+        .owner-main-col .owner-grid { margin: 0 0 18px; }
+        .owner-main-col .owner-panel { background: #fff; border-radius: 20px; border: 1px solid var(--border); padding: 18px; }
+        .owner-main-col > .owner-nav-tabs { display: none; }
+        .owner-panel > .owner-nav-tabs { display: none; }
+
+        /* Settings sub-nav rail */
+        .owner-settings-shell { display: flex; flex-direction: column; gap: 16px; }
+        .owner-settings-subnav {
+            position: sticky; top: -1px; z-index: 20; background: #f8fafc;
+            border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+            display: flex; gap: 10px; align-items: stretch; flex-direction: column;
+        }
+        .owner-subnav-buttons {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            overflow-x: auto; padding-bottom: 2px;
+        }
+        .owner-subnav-btn {
+            border: 1px solid var(--border-light); background: #fff;
+            padding: 7px 11px; border-radius: 999px; font-size: .82rem; font-weight: 700;
+            color: var(--text); cursor: pointer; white-space: nowrap; transition: all .15s ease;
+        }
+        .owner-subnav-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .owner-subnav-btn.active {
+            background: var(--primary); border-color: var(--primary); color: #fff;
+        }
+        .owner-subnav-actions {
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 4px 2px 0;
+            border-top: 1px dashed var(--border-light); margin-top: 2px;
+        }
+        .owner-subnav-actions .owner-save-status { flex: 1 1 auto; min-width: 200px; }
+        .owner-subnav-actions .btn.has-dirty::after {
+            content: ''; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
+            margin-left: 8px; display: inline-block; vertical-align: middle;
+        }
+        .owner-config-section { scroll-margin-top: 220px; transition: background .3s ease, border-color .3s ease; }
+        .owner-config-section.is-flash {
+            border-color: #0f766e; background: rgba(15,118,110,.06); box-shadow: 0 0 0 4px rgba(15,118,110,.08);
+        }
+
+        @media (max-width: 900px) {
+            .owner-dashboard-header .owner-actions .owner-mode-selector label { display:none; }
+            .owner-sidebar {
+                position: fixed; top: 0; left: 0; bottom: 0; height: 100vh;
+                transform: translateX(-110%); transition: transform .22s ease; box-shadow: 0 8px 30px rgba(15,23,42,.2);
+                width: 82%; max-width: 300px;
+            }
+            .owner-sidebar.is-open { transform: translateX(0); }
+            .owner-sidebar-brand { display: block; }
+            .owner-main-col { padding: 14px; }
+            .owner-topbar { display: flex; }
+        }
+        @media (max-width: 640px) {
+            .owner-settings-subnav { padding: 8px; }
+            .owner-subnav-actions .owner-save-status { min-width: 100%; order: 3; margin-top: 4px; }
+            .owner-subnav-btn { padding: 6px 10px; font-size: .78rem; }
+        }
     </style>
 </head>
 <body>
@@ -605,10 +713,12 @@
                     </div>
                 </div>
 
-                <div id="owner-main-view">
-                    <div class="owner-title">
-                        <h1>Owner Dashboard</h1>
-                        <p>Private sales and traffic overview. powered by PMELAB TECHNOLOGY LIMITED</p>
+                <div class="owner-dashboard-header">
+                    <div class="owner-dashboard-title">
+                        <div>
+                            <h1>Owner Dashboard</h1>
+                            <p>Private sales and traffic overview. powered by PMELAB TECHNOLOGY LIMITED</p>
+                        </div>
                     </div>
                     <div class="owner-actions">
                         <div class="owner-mode-selector" title="Active template served on the storefront">
@@ -630,51 +740,68 @@
                     </div>
                 </div>
 
-                <div class="owner-meta" id="owner-last-updated">Last updated: --</div>
+                <div class="owner-app-shell">
+                    <aside id="owner-sidebar-overlay" class="owner-sidebar-overlay" aria-hidden="true"></aside>
+                    <aside id="owner-sidebar" class="owner-sidebar" aria-label="Owner dashboard navigation">
+                        <div class="owner-sidebar-brand">Owner Dashboard</div>
+                        <ul class="owner-sidebar-list" role="tablist" aria-label="Owner dashboard sections">
+                            <li><button type="button" class="owner-sidebar-link active" data-sidebar-tab="overview"><span class="ico">🏠</span><span>Overview</span></button></li>
+                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="orders"><span class="ico">🧾</span><span>Orders &amp; Lookup</span></button></li>
+                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="products"><span class="ico">📦</span><span>Products</span></button></li>
+                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="site-selector"><span class="ico">🌐</span><span>Site Selector</span></button></li>
+                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="settings"><span class="ico">⚙️</span><span>Settings</span></button></li>
+                        </ul>
+                    </aside>
+                    <div class="owner-main-col">
+                        <div class="owner-topbar" id="owner-mobile-topbar">
+                            <div style="font-weight:800;">Owner Dashboard</div>
+                            <button type="button" class="owner-menu-toggle" id="owner-menu-toggle" aria-label="Open menu">☰ Menu</button>
+                        </div>
+                        <div class="owner-meta" id="owner-last-updated">Last updated: --</div>
+                        <div class="owner-grid">
+                            <div class="owner-card">
+                                <div class="owner-card-label">Visitors</div>
+                                <div class="owner-card-value" data-stat="totalVisitors">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Page Views</div>
+                                <div class="owner-card-value" data-stat="totalPageViews">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Successful Sales</div>
+                                <div class="owner-card-value" data-stat="successfulSalesCount">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Sales Revenue</div>
+                                <div class="owner-card-value" data-stat-money="successfulSalesAmount">₦0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Failed Sales</div>
+                                <div class="owner-card-value" data-stat="failedSalesCount">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Abandoned Checkout</div>
+                                <div class="owner-card-value" data-stat="abandonedCheckoutCount">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Manual Orders</div>
+                                <div class="owner-card-value" data-stat="manualOrdersCount">0</div>
+                            </div>
+                            <div class="owner-card">
+                                <div class="owner-card-label">Manual Order Value</div>
+                                <div class="owner-card-value" data-stat-money="manualOrdersAmount">₦0</div>
+                            </div>
+                        </div>
 
-                <div class="owner-grid">
-                    <div class="owner-card">
-                        <div class="owner-card-label">Visitors</div>
-                        <div class="owner-card-value" data-stat="totalVisitors">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Page Views</div>
-                        <div class="owner-card-value" data-stat="totalPageViews">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Successful Sales</div>
-                        <div class="owner-card-value" data-stat="successfulSalesCount">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Sales Revenue</div>
-                        <div class="owner-card-value" data-stat-money="successfulSalesAmount">₦0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Failed Sales</div>
-                        <div class="owner-card-value" data-stat="failedSalesCount">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Abandoned Checkout</div>
-                        <div class="owner-card-value" data-stat="abandonedCheckoutCount">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Manual Orders</div>
-                        <div class="owner-card-value" data-stat="manualOrdersCount">0</div>
-                    </div>
-                    <div class="owner-card">
-                        <div class="owner-card-label">Manual Order Value</div>
-                        <div class="owner-card-value" data-stat-money="manualOrdersAmount">₦0</div>
-                    </div>
-                </div>
-
-                <div class="owner-panel">
-                    <div class="owner-nav-tabs" role="tablist" aria-label="Owner dashboard sections">
-                        <button class="owner-nav-tab active" type="button" data-nav-tab="overview">Overview</button>
-                        <button class="owner-nav-tab" type="button" data-nav-tab="orders">Orders &amp; Lookup</button>
-                        <button class="owner-nav-tab" type="button" data-nav-tab="products">Products</button>
-                        <button class="owner-nav-tab" type="button" data-nav-tab="site-selector">Site Selector</button>
-                        <button class="owner-nav-tab" type="button" data-nav-tab="settings">Settings</button>
-                    </div>
+                        <div class="owner-panel">
+                            <!-- Hidden original top tab row preserved for backwards JS compatibility (no click listeners attached via old buttons anymore) -->
+                            <div class="owner-nav-tabs" role="tablist" aria-label="Owner dashboard sections" style="display:none;">
+                                <button class="owner-nav-tab active" type="button" data-nav-tab="overview" tabindex="-1" aria-hidden="true">Overview</button>
+                                <button class="owner-nav-tab" type="button" data-nav-tab="orders" tabindex="-1" aria-hidden="true">Orders &amp; Lookup</button>
+                                <button class="owner-nav-tab" type="button" data-nav-tab="products" tabindex="-1" aria-hidden="true">Products</button>
+                                <button class="owner-nav-tab" type="button" data-nav-tab="site-selector" tabindex="-1" aria-hidden="true">Site Selector</button>
+                                <button class="owner-nav-tab" type="button" data-nav-tab="settings" tabindex="-1" aria-hidden="true">Settings</button>
+                            </div>
 
                     <div id="nav-panel-overview" class="owner-nav-panel active">
                         <div class="owner-note">
@@ -756,20 +883,34 @@
                     </div>
 
                     <div id="nav-panel-settings" class="owner-nav-panel">
-                        <div class="owner-config">
-                            <h3 style="margin: 0 0 4px;">Site configuration (advanced)</h3>
-                            <p class="owner-meta">This script is developed and owned by PMELAB TECHNOLOGY LIMITED. We reserve the full copyright. You can get in touch with us via SUPPORT@PAYMELAB.COM, WWW.PAYMELAB.COM, You can buy this script legally only from Simrapay.com or Paymelab.com. Edit every setting used by the selected template. For image fields, use the <strong>Upload Image</strong> button to upload directly to Cloudflare R2, or paste an existing URL.</p>
-                            <div class="owner-tabs" role="tablist" aria-label="Site configuration modes">
-                                <button class="owner-tab active" type="button" data-config-mode="affiliate">Affiliate settings</button>
-                                <button class="owner-tab" type="button" data-config-mode="multipleproducts">Multi settings</button>
-                                <button class="owner-tab" type="button" data-config-mode="singleproduct">Single settings</button>
+                        <div class="owner-config owner-settings-shell">
+                            <div class="owner-settings-subnav" id="owner-settings-subnav" aria-label="Settings sections">
+                                <div class="owner-subnav-buttons" id="owner-settings-subnav-buttons">
+                                    <button type="button" class="owner-subnav-btn" disabled aria-disabled="true">Loading sections…</button>
+                                </div>
+                                <div class="owner-subnav-actions">
+                                    <button id="owner-config-save" class="btn btn-primary" type="button">Save settings</button>
+                                    <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload</button>
+                                    <span id="owner-config-status" class="owner-save-status" role="status" aria-live="polite"></span>
+                                </div>
                             </div>
-                            <div id="owner-config-sections"></div>
-                            <div class="owner-config-footer">
-                                <button id="owner-config-save" class="btn btn-primary" type="button">Save settings</button>
-                                <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload</button>
-                                <span id="owner-config-status" class="owner-save-status" role="status" aria-live="polite"></span>
+                            <div>
+                                <h3 style="margin: 10px 0 4px;">Site configuration (advanced)</h3>
+                                <p class="owner-meta">This script is developed and owned by PMELAB TECHNOLOGY LIMITED. We reserve the full copyright. You can get in touch with us via SUPPORT@PAYMELAB.COM, WWW.PAYMELAB.COM, You can buy this script legally only from Simrapay.com or Paymelab.com. Edit every setting used by the selected template. For image fields, use the <strong>Upload Image</strong> button to upload directly to Cloudflare R2, or paste an existing URL.</p>
+                                <div class="owner-tabs" role="tablist" aria-label="Site configuration modes">
+                                    <button class="owner-tab active" type="button" data-config-mode="affiliate">Affiliate settings</button>
+                                    <button class="owner-tab" type="button" data-config-mode="multipleproducts">Multi settings</button>
+                                    <button class="owner-tab" type="button" data-config-mode="singleproduct">Single settings</button>
+                                </div>
+                                <div id="owner-config-sections"></div>
+                                <div class="owner-config-footer" style="display:none;" aria-hidden="true">
+                                    <button class="btn btn-primary" type="button" tabindex="-1" aria-hidden="true">Save settings</button>
+                                    <button class="btn btn-secondary" type="button" tabindex="-1" aria-hidden="true">Reload</button>
+                                    <span class="owner-save-status" role="status" aria-live="polite"></span>
+                                </div>
                             </div>
+                        </div>
+                    </div>
                         </div>
                     </div>
                 </div>

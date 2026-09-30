@@ -68,6 +68,9 @@
 
     var configMode = 'affiliate';
     var configValues = {};
+    var configSectionRegistry = [];
+    var configDirty = false;
+    var configSaveInProgress = false;
     var configLabels = {
         BUSINESS: 'Business details', API_BASE_URL: 'API connection', BRAND: 'Brand colors', PRODUCT: 'Product details',
         PRODUCT_TYPE: 'Product type', PRODUCT_IMAGES: 'Product images', PRODUCT_VIDEOS: 'Product videos', FEATURES: 'Features',
@@ -395,13 +398,70 @@
         return nextConfig;
     }
 
+    function renderSettingsSubNav() {
+        var buttonsWrap = document.getElementById('owner-settings-subnav-buttons');
+        if (!buttonsWrap) return;
+        buttonsWrap.innerHTML = '';
+        if (!Array.isArray(configSectionRegistry) || configSectionRegistry.length === 0) {
+            var empty = document.createElement('button');
+            empty.type = 'button';
+            empty.className = 'owner-subnav-btn';
+            empty.disabled = true;
+            empty.setAttribute('aria-disabled', 'true');
+            empty.textContent = 'No sections loaded yet';
+            buttonsWrap.appendChild(empty);
+            return;
+        }
+        configSectionRegistry.forEach(function(entry) {
+            if (!entry || !entry.key) return;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'owner-subnav-btn';
+            btn.dataset.subnavKey = String(entry.key);
+            btn.textContent = String(entry.title || entry.key);
+            btn.addEventListener('click', function() { scrollToConfigSection(entry.key); });
+            buttonsWrap.appendChild(btn);
+        });
+    }
+
+    function scrollToConfigSection(key) {
+        var entry = (configSectionRegistry || []).find(function(x) { return x && x.key === key; });
+        var target = entry && entry.el ? entry.el : document.getElementById('config-section-' + key);
+        if (!target) return;
+        document.querySelectorAll('.owner-subnav-btn').forEach(function(btn) {
+            btn.classList.toggle('active', String(btn.dataset.subnavKey || '') === String(key));
+        });
+        try {
+            var rect = target.getBoundingClientRect();
+            var scrollTarget = rect.top + (window.pageYOffset || document.documentElement.scrollTop || 0) - 140;
+            window.scrollTo({ top: scrollTarget < 0 ? 0 : scrollTarget, behavior: 'smooth' });
+        } catch (err) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        try { target.classList.add('is-flash'); } catch (_) {}
+        window.setTimeout(function() {
+            try { target.classList.remove('is-flash'); } catch (_) {}
+        }, 2600);
+    }
+
+    function setConfigDirty(dirty) {
+        configDirty = !!dirty;
+        var saveBtn = document.getElementById('owner-config-save');
+        if (!saveBtn) return;
+        saveBtn.classList.toggle('has-dirty', configDirty);
+        saveBtn.title = configDirty ? 'You have unsaved changes' : '';
+    }
+
     function renderConfig() {
         var container = document.getElementById('owner-config-sections');
         if (!container) return;
         container.innerHTML = '';
+        configSectionRegistry = [];
         Object.keys(configValues).sort().forEach(function(key) {
             var section = document.createElement('section');
             section.className = 'owner-config-section';
+            section.id = 'config-section-' + key;
+            section.dataset.configSectionKey = key;
             var title = document.createElement('h3');
             title.textContent = configTitle(key);
             var description = document.createElement('p');
@@ -410,7 +470,16 @@
             section.appendChild(description);
             section.appendChild(renderNode(configValues[key], key, ''));
             container.appendChild(section);
+            configSectionRegistry.push({ key: String(key), id: String(section.id), title: String(configTitle(key)), el: section });
         });
+        try {
+            // Detach any prior input listeners to avoid double-triggers
+            if (container.__ownerDirtyBound) {
+                // no-op, since we use event delegation and listener is attached once in initConfig
+            }
+        } catch (_) {}
+        try { renderSettingsSubNav(); } catch (_) {}
+        setConfigDirty(false);
     }
 
     function setConfigStatus(message, isError) {
@@ -438,6 +507,7 @@
         var nextConfig = collectConfig();
         if (configMode === 'singleproduct' && !nextConfig.WEBSITE_TYPE_SELECT) nextConfig.WEBSITE_TYPE_SELECT = 'singleproduct';
         setConfigStatus('Saving settings...');
+        configSaveInProgress = true;
         try {
             var response = await fetch(getApiUrl('/api/owner/config'), {
                 method: 'PUT',
@@ -449,8 +519,11 @@
             configValues = nextConfig;
             renderConfig();
             setConfigStatus('Saved successfully. Refresh the storefront to see changes.');
+            setConfigDirty(false);
         } catch (error) {
             setConfigStatus(error.message || 'Unable to save settings', true);
+        } finally {
+            configSaveInProgress = false;
         }
     }
 
@@ -477,8 +550,15 @@
         var reset = document.getElementById('owner-config-reset');
         if (save) save.addEventListener('click', saveConfig);
         if (reset) reset.addEventListener('click', function() {
+            if (configDirty && !confirm('Reload settings? Any unsaved edits will be lost.')) return;
             loadConfig(configMode).then(function() { setConfigModeBanner(configMode); });
         });
+        var sectionsEl = document.getElementById('owner-config-sections');
+        if (sectionsEl && !sectionsEl.__ownerDirtyBound) {
+            sectionsEl.__ownerDirtyBound = true;
+            sectionsEl.addEventListener('input', function() { setConfigDirty(true); }, { passive: true });
+            sectionsEl.addEventListener('change', function() { setConfigDirty(true); }, { passive: true });
+        }
         document.getElementById('owner-config-sections').addEventListener('click', function(event) {
             var addPath = event.target.dataset.addPath;
             var removePath = event.target.dataset.removePath;
@@ -492,6 +572,16 @@
             }
             renderConfig();
         });
+        try {
+            window.addEventListener('beforeunload', function(ev) {
+                if (!configDirty || configSaveInProgress) return;
+                var msg = 'You have unsaved changes in Settings. Are you sure you want to leave?';
+                if (typeof ev !== 'undefined') {
+                    try { ev.returnValue = msg; } catch (_) {}
+                }
+                return msg;
+            });
+        } catch (_) {}
     }
 
     function setLoginFieldErrorState(hasError) {
@@ -907,28 +997,102 @@
     var activeProductsConfig = {};
     var editorDraft = null; // { isSingle, draftProduct, removedImages: Set, images: [{url, id}], specs: [], packages: [], index }
 
+    function confirmLeaveSettingsIfDirty(nextTabId) {
+        if (activeNavTab !== 'settings') return true;
+        if (!configDirty || configSaveInProgress) return true;
+        if (!nextTabId || String(nextTabId) === 'settings') return true;
+        return !!window.confirm('You have unsaved changes in Settings. Navigate away and lose unsaved changes?');
+    }
+
+    function renderSettingsSubNavIfNeeded() {
+        try {
+            if (!document.getElementById('owner-settings-subnav-buttons')) return;
+            if (Array.isArray(configSectionRegistry) && configSectionRegistry.length > 0) {
+                renderSettingsSubNav();
+                return;
+            }
+            if (configValues && Object.keys(configValues).length > 0) {
+                renderConfig();
+            }
+        } catch (_) {}
+    }
+
+    function openMobileSidebar() {
+        try {
+            var sidebar = document.getElementById('owner-sidebar');
+            var overlay = document.getElementById('owner-sidebar-overlay');
+            if (sidebar) sidebar.classList.add('is-open');
+            if (overlay) {
+                overlay.classList.add('is-open');
+                overlay.setAttribute('aria-hidden', 'false');
+            }
+        } catch (_) {}
+    }
+
+    function closeMobileSidebar() {
+        try {
+            var sidebar = document.getElementById('owner-sidebar');
+            var overlay = document.getElementById('owner-sidebar-overlay');
+            if (sidebar) sidebar.classList.remove('is-open');
+            if (overlay) {
+                overlay.classList.remove('is-open');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+        } catch (_) {}
+    }
+
     function switchNavTab(tabId) {
-        activeNavTab = tabId;
+        if (!tabId) return;
+        var target = String(tabId);
+        if (!confirmLeaveSettingsIfDirty(target)) return;
+        activeNavTab = target;
+        // Legacy top-row buttons (hidden in new shell but kept for compatibility)
         document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.navTab === tabId);
+            btn.classList.toggle('active', String(btn.dataset.navTab || '') === target);
         });
+        // New sidebar link buttons
+        document.querySelectorAll('[data-sidebar-tab]').forEach(function(btn) {
+            btn.classList.toggle('active', String(btn.dataset.sidebarTab || '') === target);
+        });
+        // Show/hide matching panel
+        var panelId = 'nav-panel-' + target;
         document.querySelectorAll('.owner-nav-panel').forEach(function(panel) {
-            var id = 'nav-panel-' + tabId;
-            panel.classList.toggle('active', panel.id === id);
+            panel.classList.toggle('active', String(panel.id) === panelId);
         });
-        if (tabId === 'products') {
+        closeMobileSidebar();
+        if (target === 'products') {
             ensureProductsModeLoaded(activeProductsMode).then(renderProductsList).catch(function(error) {
                 setProductsStatus(error.message || 'Unable to load products configuration', true);
             });
-        } else if (tabId === 'site-selector') {
+        } else if (target === 'site-selector') {
             loadSiteSelectorEditor();
+        } else if (target === 'settings') {
+            Promise.resolve().then(function() { renderSettingsSubNavIfNeeded(); });
+            var mainCol = document.querySelector('.owner-main-col');
+            if (mainCol) { try { mainCol.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {} }
+            else { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {} }
         }
     }
 
-    function initNavTabs() {
-        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
-            btn.addEventListener('click', function() { switchNavTab(btn.dataset.navTab); });
+    function initOwnerSidebar() {
+        document.querySelectorAll('[data-sidebar-tab]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var target = String(btn.dataset.sidebarTab || '').trim();
+                if (!target) return;
+                switchNavTab(target);
+            });
         });
+        var menuBtn = document.getElementById('owner-menu-toggle');
+        if (menuBtn) menuBtn.addEventListener('click', openMobileSidebar);
+        var overlay = document.getElementById('owner-sidebar-overlay');
+        if (overlay) overlay.addEventListener('click', closeMobileSidebar);
+        document.addEventListener('keydown', function(ev) {
+            if (!ev) return;
+            var key = String(ev.key || ev.code || '');
+            if (key !== 'Escape' && key !== 'Esc') return;
+            var sidebar = document.getElementById('owner-sidebar');
+            if (sidebar && sidebar.classList && sidebar.classList.contains('is-open')) closeMobileSidebar();
+        }, true);
         [
             ['nav-goto-orders', 'orders'],
             ['nav-goto-products', 'products'],
@@ -936,8 +1100,23 @@
             ['nav-goto-settings', 'settings']
         ].forEach(function(pair) {
             var el = document.getElementById(pair[0]);
-            if (el) el.addEventListener('click', function() { switchNavTab(pair[1]); });
+            if (!el) return;
+            el.addEventListener('click', function(ev) {
+                if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+                switchNavTab(pair[1]);
+            });
         });
+        try { switchNavTab(activeNavTab || 'overview'); } catch (_) {}
+    }
+
+    function initNavTabs() {
+        // Legacy top-tab click binding kept so hidden buttons (display:none in new shell) still respond to any
+        // remaining programmatic click triggers; they redirect into switchNavTab() which now owns the state.
+        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
+            btn.addEventListener('click', function() { switchNavTab(btn.dataset.navTab); });
+        });
+        // Hand off full init to sidebar init (also covers quick action buttons, mobile drawer, etc.)
+        initOwnerSidebar();
     }
 
     function setProductsStatus(message, isError) {
