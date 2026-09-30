@@ -643,6 +643,56 @@
         .owner-checklist li strong { color: var(--text); font-weight: 800; font-size: 0.9rem; }
         .owner-checklist li span { font-size: 0.88rem; color: var(--muted); }
 
+        /* PMELAB Services cards */
+        .owner-services {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 8px;
+        }
+        .owner-service-group {
+            background: #fff;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 12px 14px;
+            transition: border-color .15s ease, box-shadow .15s ease, transform .08s ease;
+        }
+        .owner-service-group:hover {
+            border-color: color-mix(in srgb, var(--primary) 26%, var(--border-light));
+            box-shadow: 0 4px 14px rgba(15, 118, 110, 0.08);
+            transform: translateY(-1px);
+        }
+        .owner-service-group-title {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 0.82rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--primary-dark);
+            margin-bottom: 9px;
+        }
+        .owner-service-group-title svg {
+            width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; flex-shrink: 0;
+        }
+        .owner-service-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .owner-service-chips > span {
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: var(--light-background);
+            border: 1px solid var(--border-light);
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.005em;
+            line-height: 1.25;
+        }
+
         /* Main area */
         .owner-main {
             flex: 1 1 auto;
@@ -1062,10 +1112,67 @@
             gap: 8px;
             padding: 0 16px 16px;
             border-top: 1px solid var(--border-light);
-            margin-top: 8px;
+            margin-top: 4px;
             padding-top: 12px;
         }
         .owner-product-actions .btn { flex: 1 1 0; justify-content: center; padding: 9px 10px; font-size: 0.86rem; }
+
+        .owner-product-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 2px;
+        }
+        .owner-product-stat-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 11px;
+            background: var(--light-background);
+            border: 1px solid var(--border-light);
+            font-size: 0.76rem;
+            line-height: 1.15;
+        }
+        .owner-product-stat-pill .stat-icon {
+            font-size: 1rem;
+            line-height: 1;
+            width: 22px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .owner-product-stat-pill > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .owner-product-stat-pill .stat-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .owner-product-stat-pill .stat-value {
+            font-size: 0.92rem;
+            font-weight: 900;
+            letter-spacing: -0.01em;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .owner-product-stat-pill.success {
+            background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+            border-color: #a7f3d0;
+        }
+        .owner-product-stat-pill.success .stat-value { color: #065f46; }
+        .owner-product-stat-pill.success .stat-label { color: #047857; }
+        .owner-product-stat-pill.info {
+            background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+            border-color: #bfdbfe;
+        }
+        .owner-product-stat-pill.info .stat-value { color: #1e3a8a; }
+        .owner-product-stat-pill.info .stat-label { color: #1d4ed8; }
         .owner-products-empty {
             background: #fff;
             border: 1px dashed var(--border);
@@ -1648,13 +1755,92 @@
                                     </div>
 
                                     <h4>What we can help with</h4>
-                                    <ul>
-                                        <li>Paystack / Flutterwave / PalmPay webhook &amp; API integration issues</li>
-                                        <li>Cloudflare R2 media storage, Workers &amp; Pages deployment problems</li>
-                                        <li>WhatsApp order bot, USSD, &amp; Vendstack channel onboarding</li>
-                                        <li>Custom storefront design, affiliate campaigns &amp; SEO tuning</li>
-                                        <li>Billing, invoices and contract onboarding for enterprise</li>
-                                    </ul>
+                                    <div class="owner-services">
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                                Products we build
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>VTU &amp; Airtime websites</span>
+                                                <span>Multi-product storefronts</span>
+                                                <span>Affiliate portals</span>
+                                                <span>Custom landing pages</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                                Software development
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>Web apps</span>
+                                                <span>Mobile applications</span>
+                                                <span>Windows &amp; desktop tools</span>
+                                                <span>API integrations</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                                AI &amp; automation
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>AI chatbots</span>
+                                                <span>Content automation</span>
+                                                <span>WhatsApp AI agents</span>
+                                                <span>Custom AI toolsets</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                                Payment providers
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>Paystack webhooks</span>
+                                                <span>Flutterwave webhooks</span>
+                                                <span>PalmPay API</span>
+                                                <span>Monnify / Nomba</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+                                                Deployment &amp; infra
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>Cloudflare Workers</span>
+                                                <span>Cloudflare Pages</span>
+                                                <span>R2 media storage</span>
+                                                <span>KV database tuning</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                                Sales &amp; channels
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>WhatsApp order bot</span>
+                                                <span>USSD onboarding</span>
+                                                <span>Vendstack channel</span>
+                                                <span>Affiliate campaigns</span>
+                                            </div>
+                                        </div>
+                                        <div class="owner-service-group">
+                                            <div class="owner-service-group-title">
+                                                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                                Billing &amp; enterprise
+                                            </div>
+                                            <div class="owner-service-chips">
+                                                <span>Custom invoices</span>
+                                                <span>Contracts &amp; NDAs</span>
+                                                <span>Retainer packages</span>
+                                                <span>SEO &amp; growth tuning</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

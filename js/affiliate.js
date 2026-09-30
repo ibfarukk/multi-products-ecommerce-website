@@ -5,6 +5,29 @@
         return document.getElementById(id);
     }
 
+    function trackAffiliateClick(productId, affiliateUrl) {
+        try {
+            var body = JSON.stringify({ url: String(affiliateUrl || ''), ts: Date.now() });
+            var endpoint = '/api/public/affiliate/' + encodeURIComponent(String(productId || '')) + '/click';
+            if (typeof fetch === 'function') {
+                try {
+                    fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body,
+                        keepalive: true
+                    }).catch(function() {});
+                } catch (_e) {}
+            }
+            if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+                try {
+                    var blob = new Blob([body], { type: 'application/json' });
+                    navigator.sendBeacon(endpoint, blob);
+                } catch (_e) {}
+            }
+        } catch (_e) {}
+    }
+
     function formatMoney(amount) {
         const value = Number(amount || 0);
         return (BUSINESS.currency || '') + value.toLocaleString('en-NG');
@@ -138,6 +161,8 @@
             const priceText = getPriceText(product);
             const specsHtml = getSpecRows(product);
             const buttonText = String(product.buttonText || 'View Details');
+            const pid = String(product.id || '');
+            const affUrl = String(product.affiliateUrl || '');
             return [
                 '<div class="package-card" style="text-align:left;">',
                 '<div style="border-radius:16px;overflow:hidden;background:var(--surface);margin-bottom:18px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;">',
@@ -148,11 +173,22 @@
                 (priceText ? ('<div style="margin-top:14px;font-weight:900;color:var(--primary);font-size:1.5rem;">' + priceText + '</div>') : ''),
                 specsHtml,
                 '<div style="margin-top:18px;display:grid;gap:10px;">',
-                '<a class="btn btn-primary" href="' + href + '" style="width:100%;display:inline-flex;justify-content:center;">' + buttonText + '</a>',
+                '<a class="btn btn-primary" href="' + href + '" data-affiliate-card-click="1" data-affiliate-id="' + pid.replace(/"/g, '&quot;') + '" data-affiliate-url="' + affUrl.replace(/"/g, '&quot;') + '" style="width:100%;display:inline-flex;justify-content:center;">' + buttonText + '</a>',
                 '</div>',
                 '</div>'
             ].join('');
         }).join('');
+
+        // Delegate click tracking on affiliate cards
+        try {
+            grid.querySelectorAll('[data-affiliate-card-click="1"]').forEach(function(el) {
+                el.addEventListener('click', function(e) {
+                    var id = el.getAttribute('data-affiliate-id') || '';
+                    var url = el.getAttribute('data-affiliate-url') || '';
+                    trackAffiliateClick(id, url);
+                });
+            });
+        } catch (_e) {}
     }
 
     function initSearchAndFilter() {

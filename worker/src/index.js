@@ -56,6 +56,11 @@ export default {
             return handleTrackOrderAttempt(request, env);
         }
 
+        // Track affiliate product link click
+        if (path.startsWith('/api/public/affiliate/') && path.endsWith('/click') && request.method === 'POST') {
+            return handleAffiliateTrackClick(request, env, path);
+        }
+
         // Owner dashboard stats
         if (path === '/api/owner/stats' && request.method === 'GET') {
             return handleOwnerStats(request, env);
@@ -559,6 +564,24 @@ async function confirmFlutterwavePayment(env, options) {
     await updateOwnerStats(env, function(stats) {
         stats.successfulSalesCount += 1;
         stats.successfulSalesAmount += Number(amount || 0);
+        var productId = String(options.productId || '').trim();
+        if (productId) {
+            if (!stats.salesByProduct) stats.salesByProduct = {};
+            if (!stats.salesByProduct[productId]) stats.salesByProduct[productId] = { count: 0, revenue: 0, manualCount: 0 };
+            stats.salesByProduct[productId].count += 1;
+            stats.salesByProduct[productId].revenue += Number(amount || 0);
+        }
+        if (Array.isArray(options.items) && options.items.length) {
+            options.items.forEach(function(item) {
+                var iid = String(item && item.productId ? item.productId : '').trim();
+                var iamt = Number(item && item.lineTotal ? item.lineTotal : 0) || 0;
+                if (!iid) return;
+                if (!stats.salesByProduct) stats.salesByProduct = {};
+                if (!stats.salesByProduct[iid]) stats.salesByProduct[iid] = { count: 0, revenue: 0, manualCount: 0 };
+                stats.salesByProduct[iid].count += Number(item && item.quantity ? item.quantity : 1) || 1;
+                stats.salesByProduct[iid].revenue += iamt;
+            });
+        }
     });
 
     try {
@@ -1342,6 +1365,31 @@ async function handleTrackOrderAttempt(request, env) {
     return jsonResponse({ success: true });
 }
 
+async function handleAffiliateTrackClick(request, env, path) {
+    try {
+        const match = String(path || '').match(/\/api\/public\/affiliate\/([^/]+)\/click/);
+        const productId = decodeURIComponent(String(match && match[1] ? match[1] : '')).trim();
+        if (!productId) {
+            return jsonResponse({ success: false, error: 'Missing product id' }, 400);
+        }
+        let data = {};
+        try { data = await request.json() || {}; } catch (_e) { data = {}; }
+        await updateOwnerStats(env, function(stats) {
+            if (!stats.affiliateClicks) stats.affiliateClicks = {};
+            if (!stats.affiliateClicks[productId]) stats.affiliateClicks[productId] = { count: 0, lastClickedAt: null };
+            stats.affiliateClicks[productId].count += 1;
+            stats.affiliateClicks[productId].lastClickedAt = new Date().toISOString();
+            if (data && data.url) {
+                stats.affiliateClicks[productId].lastUrl = String(data.url).slice(0, 250);
+            }
+        });
+        return jsonResponse({ success: true });
+    } catch (error) {
+        console.error('Affiliate click track error:', error && error.message ? error.message : error);
+        return jsonResponse({ success: false, error: error && error.message ? error.message : 'Internal error' }, 500);
+    }
+}
+
 async function handleOwnerStats(request, env) {
     if (!env.OWNER_STATS) {
         return jsonResponse({ success: false, error: 'Stats storage not configured' }, 503);
@@ -2041,6 +2089,9 @@ function getDefaultOwnerStats() {
         abandonedCheckoutCount: 0,
         manualOrdersCount: 0,
         manualOrdersAmount: 0,
+        salesByProduct: {},
+        manualByProduct: {},
+        affiliateClicks: {},
         lastUpdated: null
     };
 }
@@ -2116,6 +2167,24 @@ async function confirmPaystackPayment(env, options) {
     await updateOwnerStats(env, function(stats) {
         stats.successfulSalesCount += 1;
         stats.successfulSalesAmount += Number(amount || 0);
+        var productId = String(options.productId || '').trim();
+        if (productId) {
+            if (!stats.salesByProduct) stats.salesByProduct = {};
+            if (!stats.salesByProduct[productId]) stats.salesByProduct[productId] = { count: 0, revenue: 0, manualCount: 0 };
+            stats.salesByProduct[productId].count += 1;
+            stats.salesByProduct[productId].revenue += Number(amount || 0);
+        }
+        if (Array.isArray(options.items) && options.items.length) {
+            options.items.forEach(function(item) {
+                var iid = String(item && item.productId ? item.productId : '').trim();
+                var iamt = Number(item && item.lineTotal ? item.lineTotal : 0) || 0;
+                if (!iid) return;
+                if (!stats.salesByProduct) stats.salesByProduct = {};
+                if (!stats.salesByProduct[iid]) stats.salesByProduct[iid] = { count: 0, revenue: 0, manualCount: 0 };
+                stats.salesByProduct[iid].count += Number(item && item.quantity ? item.quantity : 1) || 1;
+                stats.salesByProduct[iid].revenue += iamt;
+            });
+        }
     });
 
     try {
@@ -2184,6 +2253,31 @@ async function recordManualOrder(env, data) {
     await updateOwnerStats(env, function(stats) {
         stats.manualOrdersCount += 1;
         stats.manualOrdersAmount += Number(data.amount || 0);
+        var productId = String(data.product_id || '').trim();
+        if (productId) {
+            if (!stats.manualByProduct) stats.manualByProduct = {};
+            if (!stats.manualByProduct[productId]) stats.manualByProduct[productId] = { count: 0, revenue: 0 };
+            stats.manualByProduct[productId].count += 1;
+            stats.manualByProduct[productId].revenue += Number(data.amount || 0);
+            if (!stats.salesByProduct) stats.salesByProduct = {};
+            if (!stats.salesByProduct[productId]) stats.salesByProduct[productId] = { count: 0, revenue: 0, manualCount: 0 };
+            stats.salesByProduct[productId].manualCount += 1;
+            stats.salesByProduct[productId].revenue += Number(data.amount || 0);
+            stats.salesByProduct[productId].count += 1;
+        }
+        if (Array.isArray(data.items) && data.items.length) {
+            data.items.forEach(function(item) {
+                var iid = String(item && item.productId ? item.productId : '').trim();
+                var iamt = Number(item && item.lineTotal ? item.lineTotal : 0) || 0;
+                var iqty = Number(item && item.quantity ? item.quantity : 1) || 1;
+                if (!iid) return;
+                if (!stats.salesByProduct) stats.salesByProduct = {};
+                if (!stats.salesByProduct[iid]) stats.salesByProduct[iid] = { count: 0, revenue: 0, manualCount: 0 };
+                stats.salesByProduct[iid].manualCount += 1;
+                stats.salesByProduct[iid].count += iqty;
+                stats.salesByProduct[iid].revenue += iamt;
+            });
+        }
     });
 
     return record;

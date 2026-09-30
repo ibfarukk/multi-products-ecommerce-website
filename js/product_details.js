@@ -5,6 +5,29 @@
         return document.getElementById(id);
     }
 
+    function trackAffiliateClick(productId, affiliateUrl) {
+        try {
+            var body = JSON.stringify({ url: String(affiliateUrl || ''), ts: Date.now() });
+            var endpoint = '/api/public/affiliate/' + encodeURIComponent(String(productId || '')) + '/click';
+            if (typeof fetch === 'function') {
+                try {
+                    fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body,
+                        keepalive: true
+                    }).catch(function() {});
+                } catch (_e) {}
+            }
+            if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+                try {
+                    var blob = new Blob([body], { type: 'application/json' });
+                    navigator.sendBeacon(endpoint, blob);
+                } catch (_e) {}
+            }
+        } catch (_e) {}
+    }
+
     function formatMoney(amount) {
         const currency = (typeof BUSINESS !== 'undefined' && BUSINESS && BUSINESS.currency) ? BUSINESS.currency : '₦';
         const value = Number(amount || 0);
@@ -317,6 +340,11 @@
                 cta.href = link || '#';
                 cta.style.pointerEvents = link ? 'auto' : 'none';
                 cta.style.opacity = link ? '1' : '0.5';
+                var pid = String(product.id || '');
+                var affUrl = link;
+                cta.addEventListener('click', function() {
+                    trackAffiliateClick(pid, affUrl);
+                });
             }
             if (priceEl) {
                 priceEl.textContent = product.price !== undefined && product.price !== null ? ('From ' + formatMoney(product.price)) : '';

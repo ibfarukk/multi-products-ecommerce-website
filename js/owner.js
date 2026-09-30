@@ -794,6 +794,11 @@
             setView(true);
             setLoginFieldErrorState(false);
             await loadModeGateOrDefault();
+            try {
+                lastLoadedStats = await fetchStats(token);
+                renderStats(lastLoadedStats);
+                if (typeof renderProductsList === 'function') renderProductsList();
+            } catch (sErr) { /* non-fatal */ }
         } catch (error) {
             clearAuthToken();
             setView(false);
@@ -859,10 +864,12 @@
             try {
                 const stats = await fetchStats(token);
                 setAuthToken(token);
+                lastLoadedStats = stats;
                 renderStats(stats);
                 setView(true);
                 setLoginFieldErrorState(false);
                 await loadModeGateOrDefault();
+                if (typeof renderProductsList === 'function') renderProductsList();
             } catch (error) {
                 setLoginFieldErrorState(true);
                 showError('owner-login-error', error.name === 'AbortError'
@@ -907,6 +914,7 @@
     var activeProductsMode = 'multipleproducts';
     var activeProductsConfig = {};
     var editorDraft = null; // { isSingle, draftProduct, removedImages: Set, images: [{url, id}], specs: [], packages: [], index }
+    var lastLoadedStats = null;
 
     function switchNavTab(tabId) {
         activeNavTab = tabId;
@@ -1175,9 +1183,66 @@
                 meta.appendChild(typePill);
             }
 
+            // Stats pills row (sales / clicks)
+            var prodStats = document.createElement('div');
+            prodStats.className = 'owner-product-stats';
+            if (isAffiliate) {
+                var clicks = 0;
+                try {
+                    if (lastLoadedStats && lastLoadedStats.affiliateClicks && product.id && lastLoadedStats.affiliateClicks[String(product.id)]) {
+                        clicks = Number(lastLoadedStats.affiliateClicks[String(product.id)].count || 0) || 0;
+                    }
+                } catch (_e) {}
+                var clicksPill = document.createElement('div');
+                clicksPill.className = 'owner-product-stat-pill';
+                clicksPill.title = 'Customer clicks through affiliate link';
+                clicksPill.innerHTML = '<span class="stat-icon">&#128279;</span><div><span class="stat-label">Clicks</span><span class="stat-value">' + formatNumber(clicks) + '</span></div>';
+                prodStats.appendChild(clicksPill);
+
+                var salesCount = 0;
+                var salesRev = 0;
+                try {
+                    if (lastLoadedStats && lastLoadedStats.salesByProduct && product.id && lastLoadedStats.salesByProduct[String(product.id)]) {
+                        var s = lastLoadedStats.salesByProduct[String(product.id)];
+                        salesCount = Number(s.count || 0) || 0;
+                        salesRev = Number(s.revenue || 0) || 0;
+                    }
+                } catch (_e) {}
+                var salesPill = document.createElement('div');
+                salesPill.className = 'owner-product-stat-pill success';
+                salesPill.title = 'Paid orders attributed to this product';
+                salesPill.innerHTML = '<span class="stat-icon">&#128179;</span><div><span class="stat-label">' + formatNumber(salesCount) + ' sale' + (salesCount === 1 ? '' : 's') + '</span><span class="stat-value">' + formatCurrency(salesRev) + '</span></div>';
+                prodStats.appendChild(salesPill);
+            } else {
+                var salesCount = 0;
+                var salesRev = 0;
+                var manualCount = 0;
+                try {
+                    if (lastLoadedStats && lastLoadedStats.salesByProduct && product.id && lastLoadedStats.salesByProduct[String(product.id)]) {
+                        var s = lastLoadedStats.salesByProduct[String(product.id)];
+                        salesCount = Number(s.count || 0) || 0;
+                        salesRev = Number(s.revenue || 0) || 0;
+                        manualCount = Number(s.manualCount || 0) || 0;
+                    }
+                } catch (_e) {}
+                var salesPill = document.createElement('div');
+                salesPill.className = 'owner-product-stat-pill success';
+                salesPill.title = 'Total paid orders (Paystack + Flutterwave + manual) attributed to this product';
+                salesPill.innerHTML = '<span class="stat-icon">&#128179;</span><div><span class="stat-label">' + formatNumber(salesCount) + ' sale' + (salesCount === 1 ? '' : 's') + (manualCount ? ' (' + formatNumber(manualCount) + ' manual)' : '') + '</span><span class="stat-value">' + formatCurrency(salesRev) + '</span></div>';
+                prodStats.appendChild(salesPill);
+
+                var revenuePill = document.createElement('div');
+                revenuePill.className = 'owner-product-stat-pill info';
+                revenuePill.title = 'Average revenue per sale';
+                var avgRev = salesCount > 0 ? (salesRev / salesCount) : 0;
+                revenuePill.innerHTML = '<span class="stat-icon">&#128200;</span><div><span class="stat-label">Avg / sale</span><span class="stat-value">' + formatCurrency(avgRev) + '</span></div>';
+                prodStats.appendChild(revenuePill);
+            }
+
             body.appendChild(title);
             if (pid.textContent) body.appendChild(pid);
             body.appendChild(meta);
+            body.appendChild(prodStats);
 
             var actions = document.createElement('div');
             actions.className = 'owner-product-actions';
