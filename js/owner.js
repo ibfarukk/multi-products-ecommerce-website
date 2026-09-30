@@ -68,9 +68,6 @@
 
     var configMode = 'affiliate';
     var configValues = {};
-    var configSectionRegistry = [];
-    var configDirty = false;
-    var configSaveInProgress = false;
     var configLabels = {
         BUSINESS: 'Business details', API_BASE_URL: 'API connection', BRAND: 'Brand colors', PRODUCT: 'Product details',
         PRODUCT_TYPE: 'Product type', PRODUCT_IMAGES: 'Product images', PRODUCT_VIDEOS: 'Product videos', FEATURES: 'Features',
@@ -398,70 +395,13 @@
         return nextConfig;
     }
 
-    function renderSettingsSubNav() {
-        var buttonsWrap = document.getElementById('owner-settings-subnav-buttons');
-        if (!buttonsWrap) return;
-        buttonsWrap.innerHTML = '';
-        if (!Array.isArray(configSectionRegistry) || configSectionRegistry.length === 0) {
-            var empty = document.createElement('button');
-            empty.type = 'button';
-            empty.className = 'owner-subnav-btn';
-            empty.disabled = true;
-            empty.setAttribute('aria-disabled', 'true');
-            empty.textContent = 'No sections loaded yet';
-            buttonsWrap.appendChild(empty);
-            return;
-        }
-        configSectionRegistry.forEach(function(entry) {
-            if (!entry || !entry.key) return;
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'owner-subnav-btn';
-            btn.dataset.subnavKey = String(entry.key);
-            btn.textContent = String(entry.title || entry.key);
-            btn.addEventListener('click', function() { scrollToConfigSection(entry.key); });
-            buttonsWrap.appendChild(btn);
-        });
-    }
-
-    function scrollToConfigSection(key) {
-        var entry = (configSectionRegistry || []).find(function(x) { return x && x.key === key; });
-        var target = entry && entry.el ? entry.el : document.getElementById('config-section-' + key);
-        if (!target) return;
-        document.querySelectorAll('.owner-subnav-btn').forEach(function(btn) {
-            btn.classList.toggle('active', String(btn.dataset.subnavKey || '') === String(key));
-        });
-        try {
-            var rect = target.getBoundingClientRect();
-            var scrollTarget = rect.top + (window.pageYOffset || document.documentElement.scrollTop || 0) - 140;
-            window.scrollTo({ top: scrollTarget < 0 ? 0 : scrollTarget, behavior: 'smooth' });
-        } catch (err) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        try { target.classList.add('is-flash'); } catch (_) {}
-        window.setTimeout(function() {
-            try { target.classList.remove('is-flash'); } catch (_) {}
-        }, 2600);
-    }
-
-    function setConfigDirty(dirty) {
-        configDirty = !!dirty;
-        var saveBtn = document.getElementById('owner-config-save');
-        if (!saveBtn) return;
-        saveBtn.classList.toggle('has-dirty', configDirty);
-        saveBtn.title = configDirty ? 'You have unsaved changes' : '';
-    }
-
     function renderConfig() {
         var container = document.getElementById('owner-config-sections');
         if (!container) return;
         container.innerHTML = '';
-        configSectionRegistry = [];
         Object.keys(configValues).sort().forEach(function(key) {
             var section = document.createElement('section');
             section.className = 'owner-config-section';
-            section.id = 'config-section-' + key;
-            section.dataset.configSectionKey = key;
             var title = document.createElement('h3');
             title.textContent = configTitle(key);
             var description = document.createElement('p');
@@ -470,16 +410,7 @@
             section.appendChild(description);
             section.appendChild(renderNode(configValues[key], key, ''));
             container.appendChild(section);
-            configSectionRegistry.push({ key: String(key), id: String(section.id), title: String(configTitle(key)), el: section });
         });
-        try {
-            // Detach any prior input listeners to avoid double-triggers
-            if (container.__ownerDirtyBound) {
-                // no-op, since we use event delegation and listener is attached once in initConfig
-            }
-        } catch (_) {}
-        try { renderSettingsSubNav(); } catch (_) {}
-        setConfigDirty(false);
     }
 
     function setConfigStatus(message, isError) {
@@ -507,7 +438,6 @@
         var nextConfig = collectConfig();
         if (configMode === 'singleproduct' && !nextConfig.WEBSITE_TYPE_SELECT) nextConfig.WEBSITE_TYPE_SELECT = 'singleproduct';
         setConfigStatus('Saving settings...');
-        configSaveInProgress = true;
         try {
             var response = await fetch(getApiUrl('/api/owner/config'), {
                 method: 'PUT',
@@ -519,11 +449,8 @@
             configValues = nextConfig;
             renderConfig();
             setConfigStatus('Saved successfully. Refresh the storefront to see changes.');
-            setConfigDirty(false);
         } catch (error) {
             setConfigStatus(error.message || 'Unable to save settings', true);
-        } finally {
-            configSaveInProgress = false;
         }
     }
 
@@ -550,15 +477,8 @@
         var reset = document.getElementById('owner-config-reset');
         if (save) save.addEventListener('click', saveConfig);
         if (reset) reset.addEventListener('click', function() {
-            if (configDirty && !confirm('Reload settings? Any unsaved edits will be lost.')) return;
             loadConfig(configMode).then(function() { setConfigModeBanner(configMode); });
         });
-        var sectionsEl = document.getElementById('owner-config-sections');
-        if (sectionsEl && !sectionsEl.__ownerDirtyBound) {
-            sectionsEl.__ownerDirtyBound = true;
-            sectionsEl.addEventListener('input', function() { setConfigDirty(true); }, { passive: true });
-            sectionsEl.addEventListener('change', function() { setConfigDirty(true); }, { passive: true });
-        }
         document.getElementById('owner-config-sections').addEventListener('click', function(event) {
             var addPath = event.target.dataset.addPath;
             var removePath = event.target.dataset.removePath;
@@ -572,16 +492,6 @@
             }
             renderConfig();
         });
-        try {
-            window.addEventListener('beforeunload', function(ev) {
-                if (!configDirty || configSaveInProgress) return;
-                var msg = 'You have unsaved changes in Settings. Are you sure you want to leave?';
-                if (typeof ev !== 'undefined') {
-                    try { ev.returnValue = msg; } catch (_) {}
-                }
-                return msg;
-            });
-        } catch (_) {}
     }
 
     function setLoginFieldErrorState(hasError) {
@@ -997,102 +907,28 @@
     var activeProductsConfig = {};
     var editorDraft = null; // { isSingle, draftProduct, removedImages: Set, images: [{url, id}], specs: [], packages: [], index }
 
-    function confirmLeaveSettingsIfDirty(nextTabId) {
-        if (activeNavTab !== 'settings') return true;
-        if (!configDirty || configSaveInProgress) return true;
-        if (!nextTabId || String(nextTabId) === 'settings') return true;
-        return !!window.confirm('You have unsaved changes in Settings. Navigate away and lose unsaved changes?');
-    }
-
-    function renderSettingsSubNavIfNeeded() {
-        try {
-            if (!document.getElementById('owner-settings-subnav-buttons')) return;
-            if (Array.isArray(configSectionRegistry) && configSectionRegistry.length > 0) {
-                renderSettingsSubNav();
-                return;
-            }
-            if (configValues && Object.keys(configValues).length > 0) {
-                renderConfig();
-            }
-        } catch (_) {}
-    }
-
-    function openMobileSidebar() {
-        try {
-            var sidebar = document.getElementById('owner-sidebar');
-            var overlay = document.getElementById('owner-sidebar-overlay');
-            if (sidebar) sidebar.classList.add('is-open');
-            if (overlay) {
-                overlay.classList.add('is-open');
-                overlay.setAttribute('aria-hidden', 'false');
-            }
-        } catch (_) {}
-    }
-
-    function closeMobileSidebar() {
-        try {
-            var sidebar = document.getElementById('owner-sidebar');
-            var overlay = document.getElementById('owner-sidebar-overlay');
-            if (sidebar) sidebar.classList.remove('is-open');
-            if (overlay) {
-                overlay.classList.remove('is-open');
-                overlay.setAttribute('aria-hidden', 'true');
-            }
-        } catch (_) {}
-    }
-
     function switchNavTab(tabId) {
-        if (!tabId) return;
-        var target = String(tabId);
-        if (!confirmLeaveSettingsIfDirty(target)) return;
-        activeNavTab = target;
-        // Legacy top-row buttons (hidden in new shell but kept for compatibility)
+        activeNavTab = tabId;
         document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
-            btn.classList.toggle('active', String(btn.dataset.navTab || '') === target);
+            btn.classList.toggle('active', btn.dataset.navTab === tabId);
         });
-        // New sidebar link buttons
-        document.querySelectorAll('[data-sidebar-tab]').forEach(function(btn) {
-            btn.classList.toggle('active', String(btn.dataset.sidebarTab || '') === target);
-        });
-        // Show/hide matching panel
-        var panelId = 'nav-panel-' + target;
         document.querySelectorAll('.owner-nav-panel').forEach(function(panel) {
-            panel.classList.toggle('active', String(panel.id) === panelId);
+            var id = 'nav-panel-' + tabId;
+            panel.classList.toggle('active', panel.id === id);
         });
-        closeMobileSidebar();
-        if (target === 'products') {
+        if (tabId === 'products') {
             ensureProductsModeLoaded(activeProductsMode).then(renderProductsList).catch(function(error) {
                 setProductsStatus(error.message || 'Unable to load products configuration', true);
             });
-        } else if (target === 'site-selector') {
+        } else if (tabId === 'site-selector') {
             loadSiteSelectorEditor();
-        } else if (target === 'settings') {
-            Promise.resolve().then(function() { renderSettingsSubNavIfNeeded(); });
-            var mainCol = document.querySelector('.owner-main-col');
-            if (mainCol) { try { mainCol.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {} }
-            else { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {} }
         }
     }
 
-    function initOwnerSidebar() {
-        document.querySelectorAll('[data-sidebar-tab]').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var target = String(btn.dataset.sidebarTab || '').trim();
-                if (!target) return;
-                switchNavTab(target);
-            });
+    function initNavTabs() {
+        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
+            btn.addEventListener('click', function() { switchNavTab(btn.dataset.navTab); });
         });
-        var menuBtn = document.getElementById('owner-menu-toggle');
-        if (menuBtn) menuBtn.addEventListener('click', openMobileSidebar);
-        var overlay = document.getElementById('owner-sidebar-overlay');
-        if (overlay) overlay.addEventListener('click', closeMobileSidebar);
-        document.addEventListener('keydown', function(ev) {
-            if (!ev) return;
-            var key = String(ev.key || ev.code || '');
-            if (key !== 'Escape' && key !== 'Esc') return;
-            var sidebar = document.getElementById('owner-sidebar');
-            if (sidebar && sidebar.classList && sidebar.classList.contains('is-open')) closeMobileSidebar();
-        }, true);
         [
             ['nav-goto-orders', 'orders'],
             ['nav-goto-products', 'products'],
@@ -1100,23 +936,8 @@
             ['nav-goto-settings', 'settings']
         ].forEach(function(pair) {
             var el = document.getElementById(pair[0]);
-            if (!el) return;
-            el.addEventListener('click', function(ev) {
-                if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
-                switchNavTab(pair[1]);
-            });
+            if (el) el.addEventListener('click', function() { switchNavTab(pair[1]); });
         });
-        try { switchNavTab(activeNavTab || 'overview'); } catch (_) {}
-    }
-
-    function initNavTabs() {
-        // Legacy top-tab click binding kept so hidden buttons (display:none in new shell) still respond to any
-        // remaining programmatic click triggers; they redirect into switchNavTab() which now owns the state.
-        document.querySelectorAll('[data-nav-tab]').forEach(function(btn) {
-            btn.addEventListener('click', function() { switchNavTab(btn.dataset.navTab); });
-        });
-        // Hand off full init to sidebar init (also covers quick action buttons, mobile drawer, etc.)
-        initOwnerSidebar();
     }
 
     function setProductsStatus(message, isError) {
@@ -2116,17 +1937,476 @@
         });
     }
 
+    var configSectionOrder = [
+        'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
+        'PRODUCT', 'PRODUCT_TYPE', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'PRODUCTS', 'AFFILIATE_PRODUCTS',
+        'SPECIFICATIONS', 'PACKAGES', 'FEATURES', 'ABOUT_PRODUCT', 'HERO_TRUST', 'WHY_CHOOSE', 'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
+        'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
+        'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
+        'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+    ];
+
+    function configSectionOrder(key) {
+        var i = configSectionOrder.indexOf(key);
+        return i < 0 ? (configSectionOrder.length + 1000) : i;
+    }
+
+    var configSectionIcons = {
+        BUSINESS: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+        BRAND: '<circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
+        COMPANY: '<path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h2M9 13h2M9 17h2M13 9h2M13 13h2M13 17h2"/>',
+        CONTACT: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.8a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.28-1.28a2 2 0 0 1 2.11-.45c.9.35 1.84.59 2.8.72A2 2 0 0 1 22 16.92z"/>',
+        STORE_CONTENT: '<path d="M3 9l1-5h16l1 5"/><path d="M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M3 9H2a2 2 0 0 1 2-3h16a2 2 0 0 1 2 3h-1"/>',
+        PRODUCT: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+        PRODUCT_TYPE: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+        PRODUCT_IMAGES: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+        PRODUCT_VIDEOS: '<rect x="2" y="4" width="15" height="16" rx="2"/><path d="M22 8l-5 4 5 4z"/>',
+        PRODUCTS: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+        AFFILIATE_PRODUCTS: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+        SPECIFICATIONS: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+        PACKAGES: '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+        FEATURES: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+        ABOUT_PRODUCT: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+        HERO_TRUST: '<path d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6z"/>',
+        WHY_CHOOSE: '<polyline points="20 6 9 17 4 12"/>',
+        DELIVERY: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+        GUARANTEE: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
+        TESTIMONIALS: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+        FAQ: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+        WHATSAPP_NUMBERS: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+        SOCIAL_LINKS: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+        PAYMENT: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>',
+        MANUAL_PAYMENT: '<path d="M20 7h-3V5a3 3 0 0 0-6 0v2H8V5a3 3 0 0 0-6 0v10a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V10a3 3 0 0 0-3-3z"/><line x1="11" y1="5" x2="11" y2="7"/>',
+        LOGO: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+        NAVIGATION: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+        FOOTER_LINKS: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="17" x2="22" y2="17"/>',
+        SEO: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+        ANALYTICS: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+        SALES_POPUP: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+        PROMOTION: '<polygon points="20.12 10.71 12.56 3.15 6.21 9.5 7.63 10.92 6.21 12.34 12.56 18.69 13.98 17.27 15.4 18.69"/>',
+        SOCIAL_PROOF_GALLERY: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+        TRUST_BADGES: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+        STICKY_CTA: '<path d="M5 3h14v14l-5-3H7a2 2 0 0 1-2-2V3z"/><line x1="8" y1="9" x2="16" y2="9"/>',
+        WEBSITE_TYPE_SELECT: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+        API_BASE_URL: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'
+    };
+
+    var configSectionDescriptions = {
+        BUSINESS: 'Business name, address, support contacts, currency and tax defaults.',
+        BRAND: 'Brand colors, fonts and the visual identity applied to the storefront.',
+        COMPANY: 'Company registration details that appear in legal footer sections.',
+        CONTACT: 'Contact form destinations, phone numbers, email & office address.',
+        STORE_CONTENT: 'Copywriting blocks shown on the storefront pages: hero, descriptions, CTAs.',
+        PRODUCT: 'Single-product template: product name, description, summary details.',
+        PRODUCT_TYPE: 'Single-product template: physical vs digital. Changes behavior of delivery section and success page.',
+        PRODUCT_IMAGES: 'Single-product template: product image gallery.',
+        PRODUCT_VIDEOS: 'Single-product template: product videos embedded in gallery.',
+        PRODUCTS: 'Multiple-products template: catalog products with images, specs and packages. Use the Products tab for easier editing.',
+        AFFILIATE_PRODUCTS: 'Affiliate template: products with external buy links and no checkout.',
+        SPECIFICATIONS: 'Single-product template: structured specs table on the storefront.',
+        PACKAGES: 'Single-product template: pricing packages that appear on the product page and checkout.',
+        FEATURES: 'Feature bulleted list shown under the product description.',
+        ABOUT_PRODUCT: 'Long-form marketing copy about the product.',
+        HERO_TRUST: 'Icon badges and partner logos shown in the hero area.',
+        WHY_CHOOSE_US: 'Key value prop boxes shown above the CTA.',
+        WHY_CHOOSE: 'Key value prop boxes shown above the CTA.',
+        DELIVERY: 'Delivery lead times, shipping scope and fulfillment copy.',
+        GUARANTEE: 'Money-back guarantee terms, warranties and trust copy.',
+        TESTIMONIALS: 'Customer testimonials appearing on the storefront.',
+        FAQ: 'Frequently asked questions section.',
+        WHATSAPP_NUMBERS: 'Floating WhatsApp widget destinations and sales rep numbers.',
+        SOCIAL_LINKS: 'Footer social media icons and links.',
+        PAYMENT: 'Paystack & Flutterwave credentials, inline checkout toggle, currencies.',
+        MANUAL_PAYMENT: 'Bank account details, instructions and deadlines for manual transfer orders.',
+        LOGO: 'Header logo, favicon, footer logo variants.',
+        NAVIGATION: 'Header navigation menu entries and links.',
+        FOOTER_LINKS: 'Footer columns, bottom navigation and legal links.',
+        SEO: 'Meta tags, OG image, canonical URL and social sharing settings.',
+        ANALYTICS: 'Google Analytics / Tag Manager IDs, tracking pixels.',
+        SALES_POPUP: 'Recent-purchases social-proof popup widget settings.',
+        PROMOTION: 'Top-bar promotion banner, discount codes announcement.',
+        SOCIAL_PROOF_GALLERY: 'Customer photos gallery shown in social proof sections.',
+        TRUST_BADGES: 'Payment badges, security seals and partner logos.',
+        STICKY_CTA: 'Sticky mobile bottom bar button behavior & copy.',
+        WEBSITE_TYPE_SELECT: 'Force a specific template mode directly in the config.',
+        API_BASE_URL: 'Override URL for Worker API calls. Leave blank in most cases.'
+    };
+
+    function setSectionStatus(key, message, isError) {
+        var el = document.getElementById('owner-config-section-status-' + key);
+        if (!el) return;
+        el.textContent = message || '';
+        el.classList.remove('is-ok', 'is-error');
+        if (message && isError) el.classList.add('is-error');
+        else if (message && !isError) el.classList.add('is-ok');
+    }
+
+    function renderConfig() {
+        var container = document.getElementById('owner-config-sections');
+        var sublist = document.getElementById('owner-sidebar-settings-sub');
+        if (!container) return;
+        container.innerHTML = '';
+        if (sublist) sublist.innerHTML = '';
+
+        var keys = Object.keys(configValues || {}).sort(function(a, b) {
+            return configSectionOrder(a) - configSectionOrder(b) || String(a).localeCompare(String(b));
+        });
+
+        keys.forEach(function(key) {
+            var section = document.createElement('section');
+            section.className = 'owner-config-section';
+            section.id = 'config-section-' + key;
+            section.dataset.configSectionKey = key;
+
+            // Header block
+            var header = document.createElement('div');
+            header.className = 'owner-config-section-header';
+            var headerLeft = document.createElement('div');
+            var titleWrap = document.createElement('div');
+            titleWrap.className = 'owner-config-section-title';
+            var iconWrap = document.createElement('div');
+            iconWrap.className = 'owner-config-section-title-icon';
+            var iconInner = configSectionIcons[key] || '<circle cx="12" cy="12" r="3"/>';
+            iconWrap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + iconInner + '</svg>';
+            var titleText = document.createElement('span');
+            titleText.textContent = configTitle(key);
+            titleWrap.appendChild(iconWrap);
+            titleWrap.appendChild(titleText);
+            var subtitle = document.createElement('p');
+            subtitle.className = 'owner-config-section-subtitle';
+            subtitle.textContent = configSectionDescriptions[key] || 'Edit the settings below. Lists can be expanded with Add item.';
+            headerLeft.appendChild(titleWrap);
+            headerLeft.appendChild(subtitle);
+            header.appendChild(headerLeft);
+
+            var body = document.createElement('div');
+            body.className = 'owner-config-section-body';
+            body.appendChild(renderNode(configValues[key], key, ''));
+
+            // Footer with per-section Save, Reload, status
+            var footer = document.createElement('div');
+            footer.className = 'owner-config-section-footer';
+            var status = document.createElement('div');
+            status.id = 'owner-config-section-status-' + key;
+            status.className = 'owner-config-section-status';
+            status.textContent = '';
+
+            var saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'btn btn-primary';
+            saveBtn.textContent = 'Save ' + configTitle(key);
+            saveBtn.setAttribute('aria-label', 'Save ' + configTitle(key));
+            saveBtn.dataset.saveSectionKey = key;
+            saveBtn.addEventListener('click', function() { saveConfig(key); });
+
+            var reloadBtn = document.createElement('button');
+            reloadBtn.type = 'button';
+            reloadBtn.className = 'btn btn-secondary';
+            reloadBtn.textContent = 'Reload this section';
+            reloadBtn.setAttribute('aria-label', 'Reload ' + configTitle(key));
+            reloadBtn.dataset.reloadSectionKey = key;
+            reloadBtn.addEventListener('click', function() { reloadConfigSection(key); });
+
+            footer.appendChild(saveBtn);
+            footer.appendChild(reloadBtn);
+            footer.appendChild(status);
+
+            section.appendChild(header);
+            section.appendChild(body);
+            section.appendChild(footer);
+            container.appendChild(section);
+
+            // Add sidebar sub-list entry
+            if (sublist) {
+                var li = document.createElement('li');
+                var link = document.createElement('button');
+                link.type = 'button';
+                link.className = 'owner-sidebar-link';
+                link.dataset.sectionJump = key;
+                link.innerHTML = (configSectionIcons[key] ? '<svg viewBox="0 0 24 24" aria-hidden="true">' + configSectionIcons[key] + '</svg> ' : '') + configTitle(key);
+                link.addEventListener('click', function() {
+                    switchToMainTab('settings');
+                    closeSidebarDrawer();
+                    scrollToConfigSection(key);
+                });
+                li.appendChild(link);
+                sublist.appendChild(li);
+            }
+        });
+
+        setupSectionScrollSpy();
+    }
+
+    function scrollToConfigSection(key) {
+        var el = document.getElementById('config-section-' + key);
+        if (!el) return;
+        if (typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        highlightSidebarSection(key);
+    }
+
+    function highlightSidebarSection(key) {
+        var sublist = document.getElementById('owner-sidebar-settings-sub');
+        if (!sublist) return;
+        var links = sublist.querySelectorAll('[data-section-jump]');
+        links.forEach(function(link) {
+            link.classList.toggle('active', link.dataset.sectionJump === key);
+        });
+    }
+
+    var scrollSpyRaf = 0;
+    function setupSectionScrollSpy() {
+        if (scrollSpyRaf) {
+            try { window.cancelAnimationFrame(scrollSpyRaf); } catch (_e) {}
+            scrollSpyRaf = 0;
+        }
+        var offsetsCache = [];
+        function buildCache() {
+            offsetsCache = [];
+            var sections = document.querySelectorAll('.owner-config-section[data-config-section-key]');
+            sections.forEach(function(el) {
+                var key = el.dataset.configSectionKey;
+                var rect = el.getBoundingClientRect();
+                offsetsCache.push({ key: key, top: rect.top + window.scrollY - 140 });
+            });
+        }
+        buildCache();
+        var lastRebuildAt = Date.now();
+        function loop() {
+            try {
+                if (Date.now() - lastRebuildAt > 2500) { buildCache(); lastRebuildAt = Date.now(); }
+                var scrollTop = window.scrollY || window.pageYOffset || 0;
+                var candidate = offsetsCache[0] ? offsetsCache[0].key : null;
+                for (var i = 0; i < offsetsCache.length; i++) {
+                    if (offsetsCache[i].top <= scrollTop) candidate = offsetsCache[i].key;
+                }
+                if (candidate) highlightSidebarSection(candidate);
+            } catch (_e) {}
+            scrollSpyRaf = 0;
+            onNextFrame();
+        }
+        function onNextFrame() {
+            if (scrollSpyRaf) return;
+            scrollSpyRaf = window.requestAnimationFrame(loop);
+        }
+        window.addEventListener('resize', buildCache, { passive: true });
+        window.addEventListener('scroll', onNextFrame, { passive: true });
+        onNextFrame();
+    }
+
+    function reloadConfigSection(sectionKey) {
+        if (!sectionKey) {
+            loadConfig(configMode).then(function() { setConfigModeBanner(configMode); });
+            return;
+        }
+        setSectionStatus(sectionKey, 'Reloading...', false);
+        fetchConfig(configMode).then(function(latest) {
+            configValues = latest;
+            if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
+            renderConfig();
+            setSectionStatus(sectionKey, 'Reloaded.', false);
+            window.setTimeout(function() { setSectionStatus(sectionKey, '', false); }, 2200);
+        }).catch(function(error) {
+            setSectionStatus(sectionKey, error && error.message ? error.message : 'Reload failed.', true);
+        });
+    }
+
+    async function saveConfig(sectionKey) {
+        var nextConfig = collectConfig();
+        if (configMode === 'singleproduct' && !nextConfig.WEBSITE_TYPE_SELECT) nextConfig.WEBSITE_TYPE_SELECT = 'singleproduct';
+        // If sectionKey provided: still send the full config, but only read status back into that section.
+        // This keeps behavior identical to existing PUT contract (config payload is always full object).
+        if (sectionKey) setSectionStatus(sectionKey, 'Saving...', false);
+        else setConfigStatus('Saving settings...');
+        try {
+            var response = await fetch(getApiUrl('/api/owner/config'), {
+                method: 'PUT',
+                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: configMode, config: nextConfig })
+            });
+            var data = await response.json().catch(function() { return {}; });
+            if (!response.ok || !data.success) throw new Error(data.error || 'Unable to save settings');
+            configValues = nextConfig;
+            // Refresh so any server-applied defaults round-trip
+            try { configValues = await fetchConfig(configMode); } catch (_t) {}
+            if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
+            renderConfig();
+            if (sectionKey) {
+                setSectionStatus(sectionKey, 'Saved. Changes are live now.', false);
+                window.setTimeout(function() { setSectionStatus(sectionKey, '', false); }, 3200);
+            } else {
+                setConfigStatus('Saved successfully. Refresh the storefront to see changes.');
+            }
+        } catch (error) {
+            if (sectionKey) setSectionStatus(sectionKey, error.message || 'Unable to save', true);
+            else setConfigStatus(error.message || 'Unable to save settings', true);
+        }
+    }
+
+    function openSidebarDrawer() {
+        var sb = document.getElementById('owner-sidebar');
+        var bd = document.getElementById('owner-sidebar-backdrop');
+        if (sb) sb.classList.add('is-open');
+        if (bd) bd.classList.add('is-open');
+    }
+    function closeSidebarDrawer() {
+        var sb = document.getElementById('owner-sidebar');
+        var bd = document.getElementById('owner-sidebar-backdrop');
+        if (sb) sb.classList.remove('is-open');
+        if (bd) bd.classList.remove('is-open');
+    }
+    function toggleSidebarDrawer() {
+        var sb = document.getElementById('owner-sidebar');
+        if (sb && sb.classList.contains('is-open')) closeSidebarDrawer();
+        else openSidebarDrawer();
+    }
+
+    function setActiveModeLabel(mode) {
+        var m = String(mode || '').toLowerCase();
+        var label = 'Multiple Products';
+        if (m === 'singleproduct') label = 'Single Product';
+        else if (m === 'affiliate') label = 'Affiliate';
+        var el = document.getElementById('owner-mobile-mode-label');
+        if (el) el.textContent = label;
+    }
+
+    function switchToMainTab(name) {
+        var navTabs = document.querySelectorAll('[data-nav-tab]');
+        navTabs.forEach(function(tab) {
+            var active = tab.dataset.navTab === name;
+            tab.classList.toggle('active', active);
+        });
+        var panels = document.querySelectorAll('.owner-nav-panel');
+        panels.forEach(function(panel) {
+            var id = panel.id || '';
+            var expects = 'nav-panel-' + name;
+            panel.classList.toggle('active', id === expects);
+        });
+        // Also keep sidebar main nav highlighted
+        var mainNavLinks = document.querySelectorAll('[data-main-nav-tab]');
+        mainNavLinks.forEach(function(link) {
+            link.classList.toggle('active', link.dataset.mainNavTab === name);
+        });
+        // If user clicked top-level Overview/Products etc. in settings, remove section scroll-highlight
+        if (name !== 'settings') {
+            var sublinks = document.querySelectorAll('#owner-sidebar-settings-sub [data-section-jump]');
+            sublinks.forEach(function(l) { l.classList.remove('active'); });
+        }
+        if (name === 'settings' && typeof window.scrollTo === 'function' && typeof configMode !== 'undefined') {
+            // nothing: let the sub-section jump control scroll
+        }
+    }
+
+    function initSidebarShell() {
+        var openBtn = document.getElementById('owner-mobile-drawer-open');
+        var backdrop = document.getElementById('owner-sidebar-backdrop');
+        if (openBtn) openBtn.addEventListener('click', toggleSidebarDrawer);
+        if (backdrop) backdrop.addEventListener('click', closeSidebarDrawer);
+
+        var scroller = document.getElementById('owner-scroll-top');
+        if (scroller) {
+            function onScrollVis() {
+                var top = window.scrollY || window.pageYOffset || 0;
+                scroller.classList.toggle('visible', top > 360);
+            }
+            window.addEventListener('scroll', onScrollVis, { passive: true });
+            scroller.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        }
+
+        // Sidebar main nav jumps → switch top tab + close drawer on mobile
+        var mainLinks = document.querySelectorAll('[data-nav-goto]');
+        mainLinks.forEach(function(link) {
+            link.addEventListener('click', function() {
+                var target = link.dataset.navGoto;
+                switchToMainTab(target);
+                closeSidebarDrawer();
+                if (target === 'settings' && typeof window.scrollTo === 'function') {
+                    window.scrollTo({ top: document.getElementById('nav-panel-settings') ? document.getElementById('nav-panel-settings').offsetTop - 24 : 0, behavior: 'smooth' });
+                } else if (typeof window.scrollTo === 'function') {
+                    var anchor = document.getElementById('nav-panel-' + target);
+                    if (anchor) window.scrollTo({ top: anchor.offsetTop - 24, behavior: 'smooth' });
+                }
+            });
+        });
+
+        // Mirror actions between sidebar footer and main header buttons
+        var sidebarMode = document.getElementById('owner-sidebar-site-mode');
+        var headerMode = document.getElementById('owner-site-mode');
+        function mirrorMode(from, to) { from && to && from.addEventListener('change', function() { try { to.value = from.value; } catch (_e) {} }); }
+        mirrorMode(sidebarMode, headerMode);
+        mirrorMode(headerMode, sidebarMode);
+
+        var sidebarApply = document.getElementById('owner-sidebar-site-mode-apply');
+        var headerApply = document.getElementById('owner-site-mode-save');
+        function applyMirror(btnFrom, btnTo) {
+            if (!btnFrom || !btnTo) return;
+            btnFrom.addEventListener('click', function() { btnTo.click(); });
+        }
+        applyMirror(sidebarApply, headerApply);
+
+        var sidebarLogout = document.getElementById('owner-sidebar-logout');
+        var headerLogout = document.getElementById('owner-logout-btn');
+        if (sidebarLogout && headerLogout) sidebarLogout.addEventListener('click', function() { headerLogout.click(); });
+
+        var sidebarRefresh = document.getElementById('owner-sidebar-refresh');
+        var headerRefresh = document.getElementById('owner-refresh-btn');
+        if (sidebarRefresh && headerRefresh) sidebarRefresh.addEventListener('click', function() { headerRefresh.click(); });
+
+        var sidebarStatus = document.getElementById('owner-sidebar-mode-status');
+        var headerStatus = document.getElementById('owner-site-mode-status');
+        if (sidebarStatus && headerStatus) {
+            var mo = window.MutationObserver ? new MutationObserver(function() {
+                sidebarStatus.textContent = headerStatus.textContent;
+            }) : null;
+            if (mo) mo.observe(headerStatus, { characterData: true, childList: true, subtree: true });
+        }
+    }
+
+    // After initSiteModeSelector: keep sidebar footer mode selector in sync with value from fetch
+    var _origApplyModeGateInit = typeof applyModeGate === 'function' ? applyModeGate : null;
+
     document.addEventListener('DOMContentLoaded', function() {
         injectBrandVariables();
         initLogin();
         initLookup();
         initActions();
+        initSidebarShell();
         initConfig();
         initSiteModeSelector();
         initModeGate();
         initNavTabs();
         initProductsManagement();
         initSiteSelectorEditor();
+        // After mode-gate apply, reflect active mode in sidebar footer selector and mobile topbar label
+        var origApply = window.__applySiteModeOverride;
+        function syncModeLabels() {
+            try {
+                var el = document.getElementById('owner-site-mode');
+                var v = el && el.value ? el.value : configMode;
+                setActiveModeLabel(v);
+                var sbm = document.getElementById('owner-sidebar-site-mode');
+                if (sbm && v) sbm.value = v;
+                var banner = document.getElementById('owner-config-mode-banner');
+                if (banner && v) {
+                    var label = v === 'singleproduct' ? 'Single Product' : (v === 'affiliate' ? 'Affiliate' : 'Multiple Products');
+                    banner.textContent = 'Editing ' + label + ' template settings';
+                }
+            } catch (_e) {}
+        }
+        var oldModeGateApply = document.getElementById('owner-mode-gate-apply');
+        if (oldModeGateApply) {
+            oldModeGateApply.addEventListener('click', function() { window.setTimeout(syncModeLabels, 250); });
+        }
+        var modeApplyBtn = document.getElementById('owner-site-mode-save');
+        if (modeApplyBtn) modeApplyBtn.addEventListener('click', function() { window.setTimeout(syncModeLabels, 300); });
+        // Keep existing setConfigModeBanner working on sidebar header
+        var oldBanner = setConfigModeBanner;
+        setConfigModeBanner = function(mode) {
+            oldBanner(mode);
+            syncModeLabels();
+        };
+        window.setTimeout(syncModeLabels, 80);
         loadDashboard();
     });
 })();

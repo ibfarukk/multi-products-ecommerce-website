@@ -10,662 +10,526 @@
     <style>
         body {
             background: #f8fafc;
+            margin: 0;
         }
-        .owner-page {
+        html {
+            scroll-behavior: smooth;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+
+        /* ===== Sidebar layout shell ===== */
+        .owner-app {
             min-height: 100vh;
-            padding: 32px 16px;
+            display: block;
         }
-        .owner-shell {
-            max-width: 1120px;
-            margin: 0 auto;
+        @media (min-width: 1080px) {
+            .owner-app { display: flex; }
         }
-        .owner-header {
+
+        /* Mobile top header */
+        .owner-mobile-topbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .owner-title h1 {
-            font-size: 1.8rem;
-            margin-bottom: 6px;
-        }
-        .owner-title p {
-            color: var(--muted);
-            margin: 0;
-        }
-        .owner-panel {
+            gap: 10px;
+            padding: 12px 16px;
             background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            box-shadow: var(--shadow-lg);
-            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 60;
         }
-        .owner-login {
-            max-width: 460px;
-            margin: 60px auto 0;
-        }
-        .owner-actions {
+        .owner-mobile-topbar-brand {
             display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
             align-items: center;
+            gap: 10px;
+            font-weight: 900;
+            color: var(--text);
         }
-        .owner-mode-selector {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            box-shadow: var(--shadow-sm);
+        .owner-mobile-topbar-brand span {
+            font-size: 0.95rem;
+            line-height: 1.2;
         }
-        .owner-mode-selector label {
-            font-size: 0.85rem;
+        .owner-mobile-topbar-brand small {
+            font-size: 0.72rem;
+            color: var(--muted);
             font-weight: 600;
-            color: var(--text);
-            white-space: nowrap;
+            display: block;
         }
-        .owner-mode-selector select {
-            min-width: 180px;
-            padding: 8px 10px;
+        .owner-hamburger {
             border: 1px solid var(--border);
-            border-radius: 10px;
-            background: #f8fafc;
-            color: var(--text);
-            font-weight: 500;
-            font-size: 0.9rem;
-        }
-        .owner-mode-selector .btn {
-            padding: 8px 14px;
-            font-size: 0.85rem;
-        }
-        .owner-mode-selector-status {
-            font-size: 0.78rem;
-            color: var(--muted);
-            min-height: 1rem;
-        }
-        .owner-mode-gate {
-            max-width: 620px;
-            margin: 40px auto 0;
             background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 22px;
-            box-shadow: var(--shadow-lg);
-            padding: 28px;
-        }
-        .owner-mode-gate h2 {
-            margin: 0 0 8px;
-            font-size: 1.5rem;
-        }
-        .owner-mode-gate p.lede {
-            margin: 0 0 18px;
-            color: var(--muted);
-        }
-        .owner-mode-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
-            margin-bottom: 20px;
-        }
-        .owner-mode-card {
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 16px;
-            cursor: pointer;
-            background: #fff;
-            transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
-        }
-        .owner-mode-card:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-sm);
-        }
-        .owner-mode-card.active {
-            border-color: #0f766e;
-            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
-        }
-        .owner-mode-card h3 {
-            margin: 0 0 6px;
-            font-size: 1rem;
-        }
-        .owner-mode-card p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.85rem;
-            line-height: 1.4;
-        }
-        .owner-mode-gate-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-        .owner-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .owner-card {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-        }
-        .owner-card-label {
-            color: var(--muted);
-            font-size: 0.92rem;
-            margin-bottom: 10px;
-        }
-        .owner-card-value {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: var(--text);
-        }
-        .owner-meta {
-            color: var(--muted);
-            font-size: 0.95rem;
-            margin-bottom: 18px;
-        }
-        .owner-note {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 16px;
-            color: var(--muted);
-        }
-        .owner-lookup {
-            margin-top: 22px;
-        }
-        .owner-lookup-form {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: flex-end;
-            margin-bottom: 16px;
-        }
-        .owner-lookup-form .form-group {
-            flex: 1 1 260px;
-            margin-bottom: 0;
-        }
-        .owner-lookup-result {
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 18px;
-            background: #fff;
-            box-shadow: var(--shadow-sm);
-        }
-        .owner-lookup-result h3 {
-            font-size: 1rem;
-            margin-bottom: 12px;
-        }
-        .owner-lookup-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--border-light);
-            font-size: 0.95rem;
-        }
-        .owner-lookup-row:last-child {
-            border-bottom: none;
-        }
-        .owner-lookup-row span:first-child {
-            color: var(--muted);
-        }
-        .owner-lookup-row span:last-child {
-            color: var(--text);
-            font-weight: 700;
-            text-align: right;
-            overflow-wrap: anywhere;
-        }
-        .owner-error {
-            margin-top: 12px;
-            color: #dc2626;
-            font-size: 0.95rem;
-        }
-        .owner-hidden {
-            display: none;
-        }
-        .owner-config {
-            margin-top: 24px;
-        }
-        .owner-tabs {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
-            margin: 0 -24px 20px;
-            padding: 0 24px;
-        }
-        .owner-tab {
-            border: 0;
-            border-bottom: 3px solid transparent;
-            background: transparent;
-            color: var(--muted);
-            padding: 12px 14px;
-            cursor: pointer;
-            font-weight: 700;
-        }
-        .owner-tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-        .owner-config-section {
-            border: 1px solid var(--border);
+            width: 40px;
+            height: 40px;
             border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 14px;
-        }
-        .owner-config-section h3 { margin-bottom: 6px; }
-        .owner-config-section p { color: var(--muted); font-size: .9rem; margin-bottom: 10px; }
-        .owner-node h4 { font-size: 1rem; margin: 16px 0 10px; color: var(--text); }
-        .owner-fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-        .owner-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: .86rem; }
-        .owner-field input, .owner-field textarea {
-            width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
-            background: #fff; color: var(--text); font: inherit;
-        }
-        .owner-field textarea { min-height: 86px; resize: vertical; line-height: 1.45; }
-        .owner-checkbox-field { flex-direction: row; align-items: center; padding-top: 26px; }
-        .owner-checkbox-field input { width: 18px; height: 18px; }
-        .owner-array-item { border: 1px solid var(--border-light); border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #fafafa; }
-        .owner-array-item h4 { margin-top: 0; }
-        .owner-add-item, .owner-remove-item { margin-top: 10px; font-size: .88rem; padding: 8px 12px; }
-        .owner-config-footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        .owner-save-status { color: var(--muted); font-size: .95rem; }
-
-        /* Site selector editor */
-        .site-selector-presets { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px; }
-        .site-selector-presets button { padding: 8px 12px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-size:.85rem; color:#0f172a; }
-        .site-selector-presets button:hover { border-color:#0f766e; color:#0f766e; }
-        .site-selector-editor textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.88rem; line-height:1.5; width:100%; min-height: 380px; border:1px solid var(--border); border-radius:12px; padding: 14px; background:#0f172a; color:#e2e8f0; }
-        .site-selector-verify { margin-top: 14px; display:flex; justify-content: space-between; align-items:center; gap:10px; flex-wrap:wrap; padding: 12px 14px; border:1px dashed var(--border); border-radius:12px; background:#f8fafc; }
-        .site-selector-verify strong { color:#0f766e; }
-        .site-selector-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top: 12px; }
-        .site-selector-meta { color: var(--muted); font-size: 0.9rem; }
-
-        /* Top-level dashboard nav tabs */
-        .owner-nav-tabs {
-            display: flex;
-            gap: 0;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
-            margin: 0 0 20px;
-            padding: 0;
-            background: #fff;
-            border-radius: 20px 20px 0 0;
-            overflow: hidden;
-        }
-        .owner-nav-tab {
-            border: 0;
-            background: transparent;
-            color: var(--muted);
-            padding: 14px 18px;
-            cursor: pointer;
-            font-weight: 800;
-            border-bottom: 3px solid transparent;
-            transition: all 0.15s ease;
-            white-space: nowrap;
-        }
-        .owner-nav-tab:hover { color: var(--text); background: #f8fafc; }
-        .owner-nav-tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-            background: #fff;
-        }
-        .owner-nav-panel { display: none; }
-        .owner-nav-panel.active { display: block; }
-
-        /* Products grid */
-        .owner-products-toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }
-        .owner-products-toolbar h3 { margin: 0; }
-        .owner-products-empty {
-            border: 2px dashed var(--border);
-            border-radius: 18px;
-            padding: 40px 18px;
-            text-align: center;
-            color: var(--muted);
-            background: #fafafa;
-        }
-        .owner-products-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 16px;
-        }
-        .owner-product-card {
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            overflow: hidden;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            box-shadow: var(--shadow-sm);
-            transition: box-shadow 0.15s ease, transform 0.15s ease;
-        }
-        .owner-product-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-        .owner-product-thumb {
-            aspect-ratio: 16 / 10;
-            background: #f1f5f9 center/cover no-repeat;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--muted);
-            font-weight: 800;
-            font-size: 2rem;
+            cursor: pointer;
         }
-        .owner-product-body { padding: 14px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; }
-        .owner-product-title {
-            font-size: 1.05rem;
-            font-weight: 900;
-            margin: 0;
-            line-height: 1.3;
+        .owner-hamburger svg { width: 20px; height: 20px; stroke: var(--text); stroke-width: 2; }
+        @media (min-width: 1080px) {
+            .owner-mobile-topbar { display: none; }
         }
-        .owner-product-id { font-size: 0.8rem; color: var(--muted); }
-        .owner-product-meta { font-size: 0.88rem; color: var(--text); margin-top: auto; padding-top: 8px; }
-        .owner-product-actions {
-            display: flex;
-            gap: 8px;
-            padding: 0 14px 14px;
-            border-top: 1px solid var(--border-light);
-            padding-top: 12px;
-            margin-top: 10px;
-        }
-        .owner-product-actions .btn { flex: 1 1 auto; padding: 9px 10px; font-size: 0.9rem; }
 
-        /* Product editor */
-        .owner-editor-header {
+        /* Sidebar */
+        .owner-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 270px;
+            background: #fff;
+            border-right: 1px solid var(--border);
+            z-index: 80;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(-100%);
+            transition: transform 0.22s ease;
+            overflow-y: auto;
+        }
+        @media (min-width: 1080px) {
+            .owner-sidebar { transform: none; }
+        }
+        .owner-sidebar.is-open { transform: none; box-shadow: 20px 0 50px rgba(2, 6, 23, 0.18); }
+
+        .owner-sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.52);
+            z-index: 75;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .owner-sidebar-backdrop.is-open { opacity: 1; pointer-events: auto; }
+        @media (min-width: 1080px) {
+            .owner-sidebar-backdrop { display: none; }
+        }
+
+        .owner-sidebar-brand {
+            padding: 22px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .owner-sidebar-brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 900;
+            font-size: 1.05rem;
+            flex-shrink: 0;
+        }
+        .owner-sidebar-brand-text h3 { margin: 0 0 2px; font-size: 0.98rem; line-height: 1.2; }
+        .owner-sidebar-brand-text p { margin: 0; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+
+        .owner-sidebar-section-title {
+            padding: 18px 20px 8px;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 900;
+            color: var(--muted);
+        }
+
+        .owner-sidebar-list {
+            list-style: none;
+            padding: 0 10px;
+            margin: 0 0 8px;
+        }
+        .owner-sidebar-list li {
+            margin: 1px 0;
+        }
+        .owner-sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid transparent;
+            transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+        .owner-sidebar-link:hover { background: #f1f5f9; }
+        .owner-sidebar-link.active {
+            background: color-mix(in srgb, var(--primary) 10%, #fff);
+            color: var(--primary);
+            border-color: color-mix(in srgb, var(--primary) 22%, #fff);
+            font-weight: 800;
+        }
+        .owner-sidebar-link svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; flex-shrink: 0; }
+
+        .owner-sidebar-sublist {
+            list-style: none;
+            padding: 2px 0 4px 16px;
+            margin: 0;
+        }
+        .owner-sidebar-sublist .owner-sidebar-link {
+            padding: 7px 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--muted);
+        }
+        .owner-sidebar-sublist .owner-sidebar-link.active {
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        .owner-sidebar-footer {
+            margin-top: auto;
+            padding: 16px 14px 22px;
+            border-top: 1px solid var(--border);
+            display: grid;
+            gap: 10px;
+        }
+        .owner-sidebar-mini-mode {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+        }
+        .owner-sidebar-mini-mode label {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .owner-sidebar-mini-mode select {
+            border: 1px solid var(--border);
+            background: #fff;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font: inherit;
+            color: var(--text);
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+        .owner-sidebar-mini-mode-row { display: flex; gap: 8px; }
+        .owner-sidebar-mini-mode-row .btn { flex: 1 1 auto; padding: 8px 10px; font-size: 0.82rem; }
+        .owner-sidebar-mini-mode-status { font-size: 0.72rem; color: var(--muted); min-height: 0.85rem; }
+
+        /* Main area */
+        .owner-main {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        @media (min-width: 1080px) {
+            .owner-main { margin-left: 270px; }
+        }
+        .owner-main-header {
+            display: none;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 16px 28px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        @media (min-width: 1080px) {
+            .owner-main-header { display: flex; }
+        }
+        .owner-main-header-title h1 {
+            margin: 0 0 2px;
+            font-size: 1.2rem;
+            font-weight: 900;
+        }
+        .owner-main-header-title p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+        .owner-main-header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .owner-main-header-actions .owner-mode-selector { box-shadow: none; }
+
+        .owner-main-body {
+            padding: 20px 16px 60px;
+        }
+        @media (min-width: 1080px) {
+            .owner-main-body { padding: 28px 32px 80px; }
+        }
+
+        /* Old owner-page wrapper cleanup (no longer needed) */
+        .owner-page { padding: 0; min-height: auto; }
+        .owner-shell { max-width: 100%; margin: 0; }
+
+        /* Login screen cleanup */
+        .owner-login { margin: 40px auto 0; max-width: 460px; box-shadow: var(--shadow-lg); }
+        .owner-login .owner-title { margin-bottom: 8px; }
+
+        .owner-mode-gate { max-width: 720px; margin: 40px auto 0; }
+
+        /* ===== Per-section save footer ===== */
+        .owner-config-section {
+            scroll-margin-top: 84px;
+            margin-bottom: 22px;
+            padding: 20px;
+            border-radius: 18px;
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+        }
+        @media (min-width: 1080px) {
+            .owner-config-section { scroll-margin-top: 92px; padding: 22px 24px; }
+        }
+        .owner-config-section-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 18px;
-            padding-bottom: 14px;
-            border-bottom: 1px solid var(--border);
-        }
-        .owner-editor-header h2 { margin: 0; font-size: 1.35rem; }
-        .owner-editor-subheader { color: var(--muted); margin-top: 4px; font-size: 0.92rem; }
-        .owner-editor-section {
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px 18px;
-            margin-bottom: 14px;
-            background: #fff;
-        }
-        .owner-editor-section h3 {
-            margin: 0 0 12px;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .owner-editor-section .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 10px; }
-        .owner-editor-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-        }
-        .owner-editor-footer {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            justify-content: flex-end;
-            flex-wrap: wrap;
-            position: sticky;
-            bottom: 0;
-            background: #fff;
-            border-top: 1px solid var(--border);
-            padding: 14px 0;
-            margin-top: 18px;
-        }
-        .owner-editor-footer .owner-save-status { flex: 1 1 auto; }
-
-        /* Images gallery editor */
-        .owner-image-gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            align-items: flex-start;
             gap: 12px;
             margin-bottom: 10px;
         }
-        .owner-image-tile {
-            border: 2px solid var(--border);
-            border-radius: 14px;
-            overflow: hidden;
-            background: #fff;
-            position: relative;
-            aspect-ratio: 1 / 1;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .owner-image-tile.is-cover {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, #fff);
-        }
-        .owner-image-tile img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .owner-image-tile-actions {
-            position: absolute;
-            inset: 0;
+        .owner-config-section-title {
             display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 6px;
-            background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.55) 100%);
-            opacity: 0;
-            transition: opacity 0.15s ease;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 900;
         }
-        .owner-image-tile:hover .owner-image-tile-actions { opacity: 1; }
-        .owner-image-tile-actions-row {
-            display: flex;
-            gap: 6px;
-            justify-content: flex-end;
-        }
-        .owner-image-tile-actions-row.bottom { justify-content: space-between; align-items: flex-end; }
-        .owner-image-tile-btn {
-            border: 0;
-            padding: 6px 10px;
+        .owner-config-section-title-icon {
+            width: 34px;
+            height: 34px;
             border-radius: 10px;
-            font-weight: 800;
-            font-size: 0.78rem;
-            cursor: pointer;
-            background: rgba(255,255,255,0.92);
-            color: var(--text);
-        }
-        .owner-image-tile-btn.primary { background: var(--primary); color: #fff; }
-        .owner-image-tile-btn.danger { background: #fee2e2; color: #b91c1c; }
-        .owner-image-tile-btn:hover { filter: brightness(0.96); }
-        .owner-gallery-toolbar {
+            background: color-mix(in srgb, var(--primary) 12%, #fff);
             display: flex;
-            gap: 10px;
             align-items: center;
-            flex-wrap: wrap;
-            margin-top: 10px;
+            justify-content: center;
+            flex-shrink: 0;
         }
-        .owner-gallery-empty {
+        .owner-config-section-title-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: var(--primary);
+            stroke-width: 2;
+            fill: none;
+        }
+        .owner-config-section-subtitle {
             color: var(--muted);
-            text-align: center;
-            padding: 18px 10px;
-            border: 2px dashed var(--border);
-            border-radius: 14px;
-            background: #fafafa;
+            font-size: 0.85rem;
+            margin: 4px 0 0;
+            line-height: 1.45;
         }
-
-        /* Editable specs & packages tables */
-        .owner-editor-table {
-            width: 100%;
-            border-collapse: collapse;
+        .owner-config-section-body {
+            padding-top: 6px;
         }
-        .owner-editor-table th, .owner-editor-table td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-light);
-            vertical-align: middle;
-        }
-        .owner-editor-table th { color: var(--muted); font-size: 0.85rem; font-weight: 800; }
-        .owner-editor-table input, .owner-editor-table textarea {
-            width: 100%;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 8px 10px;
-            font: inherit;
-            background: #fff;
-            color: var(--text);
-            box-sizing: border-box;
-        }
-        .owner-editor-table-actions {
+        .owner-config-section-footer {
             display: flex;
             gap: 10px;
             align-items: center;
-            margin-top: 10px;
             flex-wrap: wrap;
+            padding-top: 16px;
+            margin-top: 18px;
+            border-top: 1px solid var(--border-light);
         }
-        .owner-inline-btn {
-            border: 0;
-            background: transparent;
-            color: #b91c1c;
-            font-weight: 800;
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 8px;
+        .owner-config-section-footer .btn { padding: 9px 16px; font-size: 0.85rem; }
+        .owner-config-section-status {
+            font-size: 0.82rem;
+            color: var(--muted);
+            min-height: 1rem;
+            flex: 1 1 auto;
         }
-        .owner-inline-btn:hover { background: #fee2e2; }
+        .owner-config-section-status.is-ok { color: #0f766e; font-weight: 700; }
+        .owner-config-section-status.is-error { color: #dc2626; font-weight: 700; }
 
+        /* Config sections sub-nav heading in settings panel */
+        .owner-settings-intro {
+            padding: 18px 20px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-settings-intro h3 { margin: 0 0 6px; font-size: 1.1rem; }
+        .owner-settings-intro p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+        .owner-settings-intro-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: color-mix(in srgb, var(--primary) 10%, #fff);
+            color: var(--primary);
+            margin-top: 10px;
+        }
+
+        /* Legacy master save footer now secondary */
+        .owner-config-footer {
+            display: none;
+        }
+
+        .owner-tabs {
+            display: none;
+        }
+
+        /* Scroll-to-top helper when in settings for long pages */
+        .owner-scroll-top {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: #fff;
+            border: 0;
+            box-shadow: var(--shadow-md);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            cursor: pointer;
+        }
+        .owner-scroll-top.visible { display: flex; }
+        .owner-scroll-top svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; }
+
+        /* Backwards compat: ensure old cards/grid still fit in shell */
+        .owner-grid { max-width: 1180px; margin: 0 auto 24px; }
+        .owner-panel { max-width: 1180px; margin: 0 auto; }
+
+        @media (max-width: 1079px) {
+            .owner-main-header {
+                display: none !important;
+            }
+        }
         @media (max-width: 640px) {
             .owner-editor-section { padding: 12px; border-radius: 12px; }
             .owner-editor-footer { justify-content: stretch; }
             .owner-editor-footer .btn { flex: 1 1 auto; }
             .owner-nav-tab { padding: 12px 14px; font-size: 0.88rem; }
-        }
-
-        /* =========================================================
-           PROFESSIONAL DASHBOARD: APP SHELL + SIDEBAR + SUB-NAV
-           ========================================================= */
-        .owner-page { background: #f4f6fb; }
-        #owner-dashboard-view { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        .owner-dashboard-header {
-            background: #fff; border-bottom: 1px solid var(--border); padding: 12px 18px;
-            display: flex; justify-content: space-between; align-items: center; gap: 14px;
-            flex-wrap: wrap;
-        }
-        .owner-dashboard-header .owner-dashboard-title { display:flex; align-items:center; gap:10px; }
-        .owner-dashboard-header .owner-dashboard-title h1 { margin: 0; font-size: 1.1rem; }
-        .owner-dashboard-header .owner-dashboard-title p { margin: 0; font-size: .8rem; color: var(--muted); }
-        .owner-dashboard-header .owner-actions { margin: 0; }
-        .owner-dashboard-header .owner-title { padding: 0; margin: 0; display:none; }
-        .owner-app-shell { flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden; }
-        .owner-sidebar-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
-            z-index: 40; opacity: 0; transition: opacity .2s ease;
-        }
-        .owner-sidebar-overlay.is-open { display: block; opacity: 1; }
-        .owner-sidebar {
-            width: 248px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border);
-            padding: 16px 10px; overflow-y: auto; z-index: 45; position: relative;
-        }
-        .owner-sidebar-brand {
-            display: none; font-weight: 900; font-size: 1rem; padding: 8px 10px 14px;
-            border-bottom: 1px solid var(--border-light); margin-bottom: 10px;
-        }
-        .owner-sidebar-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
-        .owner-sidebar-link {
-            display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent;
-            padding: 11px 12px; border-radius: 12px; cursor: pointer; color: var(--text-muted, #475569);
-            font-weight: 700; font-size: .92rem; text-align: left; transition: all .15s ease;
-        }
-        .owner-sidebar-link:hover { background: #f1f5f9; color: var(--text); }
-        .owner-sidebar-link.active { background: var(--primary, #0f766e); color: #fff; box-shadow: 0 6px 18px -8px rgba(15, 118, 110, .6); }
-        .owner-sidebar-link .ico { width: 22px; font-size: 1.05rem; display: inline-flex; justify-content: center; }
-        .owner-topbar {
-            display: none; background: #fff; border-bottom: 1px solid var(--border);
-            padding: 10px 14px; position: sticky; top: 0; z-index: 30;
-            align-items: center; justify-content: space-between;
-        }
-        .owner-topbar.is-visible { display: flex; }
-        .owner-topbar .owner-menu-toggle {
-            border: 0; background: #f1f5f9; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer;
-        }
-        .owner-main-col {
-            flex: 1 1 auto; overflow-y: auto; padding: 18px; min-width: 0;
-        }
-        .owner-main-col .owner-meta { margin: 0 0 10px; }
-        .owner-main-col .owner-grid { margin: 0 0 18px; }
-        .owner-main-col .owner-panel { background: #fff; border-radius: 20px; border: 1px solid var(--border); padding: 18px; }
-        .owner-main-col > .owner-nav-tabs { display: none; }
-        .owner-panel > .owner-nav-tabs { display: none; }
-
-        /* Settings sub-nav rail */
-        .owner-settings-shell { display: flex; flex-direction: column; gap: 16px; }
-        .owner-settings-subnav {
-            position: sticky; top: -1px; z-index: 20; background: #f8fafc;
-            border: 1px solid var(--border); border-radius: 14px; padding: 10px;
-            display: flex; gap: 10px; align-items: stretch; flex-direction: column;
-        }
-        .owner-subnav-buttons {
-            display: flex; flex-wrap: wrap; gap: 6px;
-            overflow-x: auto; padding-bottom: 2px;
-        }
-        .owner-subnav-btn {
-            border: 1px solid var(--border-light); background: #fff;
-            padding: 7px 11px; border-radius: 999px; font-size: .82rem; font-weight: 700;
-            color: var(--text); cursor: pointer; white-space: nowrap; transition: all .15s ease;
-        }
-        .owner-subnav-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .owner-subnav-btn.active {
-            background: var(--primary); border-color: var(--primary); color: #fff;
-        }
-        .owner-subnav-actions {
-            display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 4px 2px 0;
-            border-top: 1px dashed var(--border-light); margin-top: 2px;
-        }
-        .owner-subnav-actions .owner-save-status { flex: 1 1 auto; min-width: 200px; }
-        .owner-subnav-actions .btn.has-dirty::after {
-            content: ''; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
-            margin-left: 8px; display: inline-block; vertical-align: middle;
-        }
-        .owner-config-section { scroll-margin-top: 220px; transition: background .3s ease, border-color .3s ease; }
-        .owner-config-section.is-flash {
-            border-color: #0f766e; background: rgba(15,118,110,.06); box-shadow: 0 0 0 4px rgba(15,118,110,.08);
-        }
-
-        @media (max-width: 900px) {
-            .owner-dashboard-header .owner-actions .owner-mode-selector label { display:none; }
-            .owner-sidebar {
-                position: fixed; top: 0; left: 0; bottom: 0; height: 100vh;
-                transform: translateX(-110%); transition: transform .22s ease; box-shadow: 0 8px 30px rgba(15,23,42,.2);
-                width: 82%; max-width: 300px;
-            }
-            .owner-sidebar.is-open { transform: translateX(0); }
-            .owner-sidebar-brand { display: block; }
-            .owner-main-col { padding: 14px; }
-            .owner-topbar { display: flex; }
-        }
-        @media (max-width: 640px) {
-            .owner-settings-subnav { padding: 8px; }
-            .owner-subnav-actions .owner-save-status { min-width: 100%; order: 3; margin-top: 4px; }
-            .owner-subnav-btn { padding: 6px 10px; font-size: .78rem; }
+            .owner-config-section { padding: 16px; border-radius: 16px; }
+            .owner-sidebar-link { padding: 8px 10px; font-size: 0.92rem; }
+            .owner-settings-intro { padding: 16px; }
         }
     </style>
-</head>
 <body>
-    <div class="owner-page">
-        <div class="owner-shell">
+    <div class="owner-app">
+        <!-- Mobile top bar (only visible < 1080px) -->
+        <div class="owner-mobile-topbar" id="owner-mobile-topbar">
+            <button type="button" class="owner-hamburger" id="owner-mobile-drawer-open" aria-label="Open navigation">
+                <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="owner-mobile-topbar-brand">
+                <div class="owner-sidebar-brand-logo" style="width:36px;height:36px;border-radius:10px;font-size:0.9rem;">P</div>
+                <div>
+                    <span>Owner Dashboard</span>
+                    <small id="owner-mobile-mode-label">Multiple Products</small>
+                </div>
+            </div>
+            <div style="width:40px;"></div>
+        </div>
+
+        <!-- Sidebar backdrop for mobile drawer -->
+        <div class="owner-sidebar-backdrop" id="owner-sidebar-backdrop"></div>
+
+        <!-- Sidebar -->
+        <aside class="owner-sidebar" id="owner-sidebar">
+            <div class="owner-sidebar-brand">
+                <div class="owner-sidebar-brand-logo">P</div>
+                <div class="owner-sidebar-brand-text">
+                    <h3>Owner Dashboard</h3>
+                    <p>PMELAB Technology</p>
+                </div>
+            </div>
+
+            <div class="owner-sidebar-section-title">Dashboard</div>
+            <ul class="owner-sidebar-list" data-main-nav>
+                <li><button type="button" class="owner-sidebar-link" data-nav-goto="overview" data-main-nav-tab="overview">
+                    <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg> Overview
+                </button></li>
+                <li><button type="button" class="owner-sidebar-link" data-nav-goto="orders" data-main-nav-tab="orders">
+                    <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Orders &amp; Lookup
+                </button></li>
+                <li><button type="button" class="owner-sidebar-link" data-nav-goto="products" data-main-nav-tab="products">
+                    <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Products
+                </button></li>
+                <li><button type="button" class="owner-sidebar-link" data-nav-goto="site-selector" data-main-nav-tab="site-selector">
+                    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Site Selector
+                </button></li>
+            </ul>
+
+            <div class="owner-sidebar-section-title">Settings</div>
+            <ul class="owner-sidebar-list">
+                <li><button type="button" class="owner-sidebar-link" data-nav-goto="settings" data-main-nav-tab="settings" id="owner-sidebar-settings-header">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Template settings
+                </button></li>
+            </ul>
+
+            <!-- Settings sub-nav: populated dynamically in owner.js based on loaded mode sections -->
+            <ul class="owner-sidebar-sublist" id="owner-sidebar-settings-sub"></ul>
+
+            <!-- Sidebar footer: mode selector + quick logout -->
+            <div class="owner-sidebar-footer">
+                <div class="owner-sidebar-mini-mode">
+                    <label for="owner-sidebar-site-mode">Store Mode</label>
+                    <select id="owner-sidebar-site-mode" aria-label="Active website mode">
+                        <option value="singleproduct">Single Product</option>
+                        <option value="multipleproducts">Multiple Products</option>
+                        <option value="affiliate">Affiliate</option>
+                    </select>
+                    <div class="owner-sidebar-mini-mode-row">
+                        <button type="button" id="owner-sidebar-site-mode-apply" class="btn btn-primary">Apply</button>
+                        <button type="button" id="owner-sidebar-logout" class="btn btn-secondary">Logout</button>
+                    </div>
+                    <div class="owner-sidebar-mini-mode-status" id="owner-sidebar-mode-status">Last saved: --</div>
+                    <button type="button" class="btn btn-secondary" id="owner-sidebar-refresh" style="padding:8px 10px;font-size:0.82rem;">Refresh data</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main content area -->
+        <main class="owner-main">
+            <div class="owner-main-header">
+                <div class="owner-main-header-title">
+                    <h1>Owner Dashboard</h1>
+                    <p id="owner-main-subheader">Private sales and traffic overview. Powered by PMELAB TECHNOLOGY LIMITED.</p>
+                </div>
+                <div class="owner-main-header-actions">
+                    <div class="owner-mode-selector" title="Active template served on the storefront">
+                        <label for="owner-site-mode">Store Mode</label>
+                        <select id="owner-site-mode" aria-label="Active website mode">
+                            <option value="singleproduct">Single Product</option>
+                            <option value="multipleproducts">Multiple Products</option>
+                            <option value="affiliate">Affiliate</option>
+                        </select>
+                        <button id="owner-site-mode-save" class="btn btn-primary" type="button">Apply</button>
+                    </div>
+                    <button id="owner-refresh-btn" class="btn btn-primary" type="button">Refresh</button>
+                    <button id="owner-logout-btn" class="btn btn-secondary" type="button">Logout</button>
+                </div>
+            </div>
+
+            <div class="owner-main-body">
+                <div class="owner-page" style="padding:0;">
+                    <div class="owner-shell" style="max-width:none;">
+
             <div id="owner-login-view" class="owner-login owner-panel">
                 <div class="owner-title">
                     <h1>Owner Dashboard</h1>
@@ -713,210 +577,160 @@
                     </div>
                 </div>
 
-                <div class="owner-dashboard-header">
-                    <div class="owner-dashboard-title">
-                        <div>
-                            <h1>Owner Dashboard</h1>
-                            <p>Private sales and traffic overview. powered by PMELAB TECHNOLOGY LIMITED</p>
-                        </div>
-                    </div>
-                    <div class="owner-actions">
-                        <div class="owner-mode-selector" title="Active template served on the storefront">
-                            <label for="owner-site-mode">Store Mode</label>
-                            <select id="owner-site-mode" aria-label="Active website mode">
-                                <option value="singleproduct">Single Product</option>
-                                <option value="multipleproducts">Multiple Products</option>
-                                <option value="affiliate">Affiliate</option>
-                            </select>
-                            <button id="owner-site-mode-save" class="btn btn-primary" type="button">Apply</button>
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:4px;">
-                            <div style="display:flex; gap:12px;">
-                                <button id="owner-refresh-btn" class="btn btn-primary" type="button">Refresh</button>
-                                <button id="owner-logout-btn" class="btn btn-secondary" type="button">Logout</button>
-                            </div>
-                            <div id="owner-site-mode-status" class="owner-mode-selector-status">Last saved: --</div>
-                        </div>
-                    </div>
-                </div>
+                <div id="owner-main-view" class="owner-hidden">
+                    <div class="owner-meta" id="owner-last-updated" style="max-width:1180px;margin:0 auto 22px;">Last updated: --</div>
 
-                <div class="owner-app-shell">
-                    <aside id="owner-sidebar-overlay" class="owner-sidebar-overlay" aria-hidden="true"></aside>
-                    <aside id="owner-sidebar" class="owner-sidebar" aria-label="Owner dashboard navigation">
-                        <div class="owner-sidebar-brand">Owner Dashboard</div>
-                        <ul class="owner-sidebar-list" role="tablist" aria-label="Owner dashboard sections">
-                            <li><button type="button" class="owner-sidebar-link active" data-sidebar-tab="overview"><span class="ico">🏠</span><span>Overview</span></button></li>
-                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="orders"><span class="ico">🧾</span><span>Orders &amp; Lookup</span></button></li>
-                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="products"><span class="ico">📦</span><span>Products</span></button></li>
-                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="site-selector"><span class="ico">🌐</span><span>Site Selector</span></button></li>
-                            <li><button type="button" class="owner-sidebar-link" data-sidebar-tab="settings"><span class="ico">⚙️</span><span>Settings</span></button></li>
-                        </ul>
-                    </aside>
-                    <div class="owner-main-col">
-                        <div class="owner-topbar" id="owner-mobile-topbar">
-                            <div style="font-weight:800;">Owner Dashboard</div>
-                            <button type="button" class="owner-menu-toggle" id="owner-menu-toggle" aria-label="Open menu">☰ Menu</button>
+                    <div class="owner-grid" id="owner-stats-grid">
+                        <div class="owner-card">
+                            <div class="owner-card-label">Visitors</div>
+                            <div class="owner-card-value" data-stat="totalVisitors">0</div>
                         </div>
-                        <div class="owner-meta" id="owner-last-updated">Last updated: --</div>
-                        <div class="owner-grid">
-                            <div class="owner-card">
-                                <div class="owner-card-label">Visitors</div>
-                                <div class="owner-card-value" data-stat="totalVisitors">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Page Views</div>
-                                <div class="owner-card-value" data-stat="totalPageViews">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Successful Sales</div>
-                                <div class="owner-card-value" data-stat="successfulSalesCount">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Sales Revenue</div>
-                                <div class="owner-card-value" data-stat-money="successfulSalesAmount">₦0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Failed Sales</div>
-                                <div class="owner-card-value" data-stat="failedSalesCount">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Abandoned Checkout</div>
-                                <div class="owner-card-value" data-stat="abandonedCheckoutCount">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Manual Orders</div>
-                                <div class="owner-card-value" data-stat="manualOrdersCount">0</div>
-                            </div>
-                            <div class="owner-card">
-                                <div class="owner-card-label">Manual Order Value</div>
-                                <div class="owner-card-value" data-stat-money="manualOrdersAmount">₦0</div>
-                            </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Page Views</div>
+                            <div class="owner-card-value" data-stat="totalPageViews">0</div>
                         </div>
-
-                        <div class="owner-panel">
-                            <!-- Hidden original top tab row preserved for backwards JS compatibility (no click listeners attached via old buttons anymore) -->
-                            <div class="owner-nav-tabs" role="tablist" aria-label="Owner dashboard sections" style="display:none;">
-                                <button class="owner-nav-tab active" type="button" data-nav-tab="overview" tabindex="-1" aria-hidden="true">Overview</button>
-                                <button class="owner-nav-tab" type="button" data-nav-tab="orders" tabindex="-1" aria-hidden="true">Orders &amp; Lookup</button>
-                                <button class="owner-nav-tab" type="button" data-nav-tab="products" tabindex="-1" aria-hidden="true">Products</button>
-                                <button class="owner-nav-tab" type="button" data-nav-tab="site-selector" tabindex="-1" aria-hidden="true">Site Selector</button>
-                                <button class="owner-nav-tab" type="button" data-nav-tab="settings" tabindex="-1" aria-hidden="true">Settings</button>
-                            </div>
-
-                    <div id="nav-panel-overview" class="owner-nav-panel active">
-                        <div class="owner-note">
-                            <strong>What these numbers mean</strong><br>
-                            Successful sales count verified Paystack &amp; Flutterwave orders. Manual orders are tracked separately because they may still be awaiting confirmation. Failed sales count backend verification failures. Abandoned checkout counts payment windows closed before completion.
+                        <div class="owner-card">
+                            <div class="owner-card-label">Successful Sales</div>
+                            <div class="owner-card-value" data-stat="successfulSalesCount">0</div>
                         </div>
-                        <div id="owner-dashboard-error" class="owner-error owner-hidden"></div>
-                        <div style="margin-top: 24px; padding: 18px; border:1px solid var(--border); border-radius: 16px; background:#fff;">
-                            <h3 style="margin: 0 0 10px;">Quick actions</h3>
-                            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                <button type="button" class="btn btn-secondary" id="nav-goto-orders">Lookup payment reference</button>
-                                <button type="button" class="btn btn-secondary" id="nav-goto-products">Manage products</button>
-                                <button type="button" class="btn btn-secondary" id="nav-goto-site-selector">Change store template</button>
-                                <button type="button" class="btn btn-secondary" id="nav-goto-settings">Advanced site settings</button>
-                            </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Sales Revenue</div>
+                            <div class="owner-card-value" data-stat-money="successfulSalesAmount">₦0</div>
+                        </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Failed Sales</div>
+                            <div class="owner-card-value" data-stat="failedSalesCount">0</div>
+                        </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Abandoned Checkout</div>
+                            <div class="owner-card-value" data-stat="abandonedCheckoutCount">0</div>
+                        </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Manual Orders</div>
+                            <div class="owner-card-value" data-stat="manualOrdersCount">0</div>
+                        </div>
+                        <div class="owner-card">
+                            <div class="owner-card-label">Manual Order Value</div>
+                            <div class="owner-card-value" data-stat-money="manualOrdersAmount">₦0</div>
                         </div>
                     </div>
 
-                    <div id="nav-panel-orders" class="owner-nav-panel">
-                        <div class="owner-lookup">
-                            <h3 style="margin: 0 0 12px 0;">Payment reference lookup</h3>
-                            <p class="owner-meta">Search any Paystack or Flutterwave reference to see the full order details.</p>
-                            <form id="owner-lookup-form" class="owner-lookup-form">
-                                <div class="form-group">
-                                    <label for="owner-lookup-ref">Payment Reference</label>
-                                    <input type="text" id="owner-lookup-ref" autocomplete="off" placeholder="e.g. PMELAB-ABC123..." required>
+                    <div class="owner-panel" style="padding:0; overflow:hidden;">
+                        <div class="owner-nav-tabs" role="tablist" aria-label="Owner dashboard sections">
+                            <button class="owner-nav-tab active" type="button" data-nav-tab="overview">Overview</button>
+                            <button class="owner-nav-tab" type="button" data-nav-tab="orders">Orders &amp; Lookup</button>
+                            <button class="owner-nav-tab" type="button" data-nav-tab="products">Products</button>
+                            <button class="owner-nav-tab" type="button" data-nav-tab="site-selector">Site Selector</button>
+                            <button class="owner-nav-tab" type="button" data-nav-tab="settings">Settings</button>
+                        </div>
+
+                        <div style="padding:24px;">
+                        <div id="nav-panel-overview" class="owner-nav-panel active">
+                            <div class="owner-note">
+                                <strong>What these numbers mean</strong><br>
+                                Successful sales count verified Paystack &amp; Flutterwave orders. Manual orders are tracked separately because they may still be awaiting confirmation. Failed sales count backend verification failures. Abandoned checkout counts payment windows closed before completion.
+                            </div>
+                            <div id="owner-dashboard-error" class="owner-error owner-hidden"></div>
+                            <div style="margin-top: 24px; padding: 18px; border:1px solid var(--border); border-radius: 16px; background:#fff;">
+                                <h3 style="margin: 0 0 10px;">Quick actions</h3>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                    <button type="button" class="btn btn-secondary" id="nav-goto-orders">Lookup payment reference</button>
+                                    <button type="button" class="btn btn-secondary" id="nav-goto-products">Manage products</button>
+                                    <button type="button" class="btn btn-secondary" id="nav-goto-site-selector">Change store template</button>
+                                    <button type="button" class="btn btn-secondary" id="nav-goto-settings">Advanced site settings</button>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Search</button>
-                            </form>
-                            <div id="owner-lookup-error" class="owner-error owner-hidden" role="alert" aria-live="polite"></div>
-                            <div id="owner-lookup-result" class="owner-lookup-result owner-hidden" aria-live="polite"></div>
-                        </div>
-                    </div>
-
-                    <div id="nav-panel-products" class="owner-nav-panel">
-                        <div class="owner-products-toolbar">
-                            <div>
-                                <h3 style="margin: 0 0 4px;">Products</h3>
-                                <p class="owner-meta" id="owner-products-subheader" style="margin:0; font-size:0.9rem;">
-                                    Edit product details, images, specifications and pricing.
-                                </p>
-                            </div>
-                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                <select id="owner-products-mode" class="form-group" style="margin:0;">
-                                    <option value="multipleproducts">Multi-product template</option>
-                                    <option value="singleproduct">Single-product template</option>
-                                    <option value="affiliate">Affiliate template</option>
-                                </select>
-                                <button type="button" class="btn btn-primary" id="owner-add-product-btn">+ Add product</button>
                             </div>
                         </div>
-                        <div id="owner-products-view"></div>
-                        <div id="owner-product-editor-view" class="owner-hidden"></div>
-                    </div>
 
-                    <div id="nav-panel-site-selector" class="owner-nav-panel">
-                        <div class="site-selector-editor">
-                            <h3 style="margin: 0 0 4px;">Site Selector</h3>
-                            <p class="site-selector-meta" style="margin: 0 0 14px;">Choose which storefront template is shown to customers. Select a quick preset or edit the file directly, then click Save. Changes apply immediately to customers. Source: <span id="site-selector-source" style="color:#0f766e; font-weight:600;">assets</span></p>
-                            <div class="site-selector-presets">
-                                <button type="button" data-site-selector-preset="singleproduct">Apply Single Product mode</button>
-                                <button type="button" data-site-selector-preset="multipleproducts">Apply Multiple Products mode</button>
-                                <button type="button" data-site-selector-preset="affiliate">Apply Affiliate mode</button>
+                        <div id="nav-panel-orders" class="owner-nav-panel">
+                            <div class="owner-lookup">
+                                <h3 style="margin: 0 0 12px 0;">Payment reference lookup</h3>
+                                <p class="owner-meta">Search any Paystack or Flutterwave reference to see the full order details.</p>
+                                <form id="owner-lookup-form" class="owner-lookup-form">
+                                    <div class="form-group">
+                                        <label for="owner-lookup-ref">Payment Reference</label>
+                                        <input type="text" id="owner-lookup-ref" autocomplete="off" placeholder="e.g. PMELAB-ABC123..." required>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Search</button>
+                                </form>
+                                <div id="owner-lookup-error" class="owner-error owner-hidden" role="alert" aria-live="polite"></div>
+                                <div id="owner-lookup-result" class="owner-lookup-result owner-hidden" aria-live="polite"></div>
                             </div>
-                            <textarea id="site-selector-editor-textarea" spellcheck="false" aria-label="site_selector.js editor"></textarea>
-                            <div class="site-selector-actions">
-                                <button type="button" id="site-selector-save-btn" class="btn btn-primary">Save site_selector.js</button>
-                                <button type="button" id="site-selector-reload-btn" class="btn btn-secondary">Reload</button>
-                                <span id="site-selector-status" class="owner-save-status" role="status" aria-live="polite"></span>
-                            </div>
-                            <div class="site-selector-verify">
+                        </div>
+
+                        <div id="nav-panel-products" class="owner-nav-panel">
+                            <div class="owner-products-toolbar">
                                 <div>
-                                    <div class="site-selector-meta">Active mode used by Worker (served via /js/site_selector.js): <strong id="site-selector-live-mode">multipleproducts</strong></div>
-                                    <div class="site-selector-meta" style="margin-top:4px;">Server-side redirects and product settings products will auto-refresh the storefront immediately after you click Save. We also refresh on every request.</div>
+                                    <h3 style="margin: 0 0 4px;">Products</h3>
+                                    <p class="owner-meta" id="owner-products-subheader" style="margin:0; font-size:0.9rem;">
+                                        Edit product details, images, specifications and pricing.
+                                    </p>
                                 </div>
-                                <div class="site-selector-meta">Tip: the uncomment exactly one line. The Worker rewrite always overwrites the static file so customers receive. Server redirects take higher priority.</div>
+                                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                    <select id="owner-products-mode" class="form-group" style="margin:0;">
+                                        <option value="multipleproducts">Multi-product template</option>
+                                        <option value="singleproduct">Single-product template</option>
+                                        <option value="affiliate">Affiliate template</option>
+                                    </select>
+                                    <button type="button" class="btn btn-primary" id="owner-add-product-btn">+ Add product</button>
+                                </div>
+                            </div>
+                            <div id="owner-products-view"></div>
+                            <div id="owner-product-editor-view" class="owner-hidden"></div>
+                        </div>
+
+                        <div id="nav-panel-site-selector" class="owner-nav-panel">
+                            <div class="site-selector-editor">
+                                <h3 style="margin: 0 0 4px;">Site Selector</h3>
+                                <p class="site-selector-meta" style="margin: 0 0 14px;">Choose which storefront template is shown to customers. Select a quick preset or edit the file directly, then click Save. Changes apply immediately to customers. Source: <span id="site-selector-source" style="color:#0f766e; font-weight:600;">assets</span></p>
+                                <div class="site-selector-presets">
+                                    <button type="button" data-site-selector-preset="singleproduct">Apply Single Product mode</button>
+                                    <button type="button" data-site-selector-preset="multipleproducts">Apply Multiple Products mode</button>
+                                    <button type="button" data-site-selector-preset="affiliate">Apply Affiliate mode</button>
+                                </div>
+                                <textarea id="site-selector-editor-textarea" spellcheck="false" aria-label="site_selector.js editor"></textarea>
+                                <div class="site-selector-actions">
+                                    <button type="button" id="site-selector-save-btn" class="btn btn-primary">Save site_selector.js</button>
+                                    <button type="button" id="site-selector-reload-btn" class="btn btn-secondary">Reload</button>
+                                    <span id="site-selector-status" class="owner-save-status" role="status" aria-live="polite"></span>
+                                </div>
+                                <div class="site-selector-verify">
+                                    <div>
+                                        <div class="site-selector-meta">Active mode used by Worker (served via /js/site_selector.js): <strong id="site-selector-live-mode">multipleproducts</strong></div>
+                                        <div class="site-selector-meta" style="margin-top:4px;">Server-side redirects and product settings products will auto-refresh the storefront immediately after you click Save. We also refresh on every request.</div>
+                                    </div>
+                                    <div class="site-selector-meta">Tip: the uncomment exactly one line. The Worker rewrite always overwrites the static file so customers receive. Server redirects take higher priority.</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div id="nav-panel-settings" class="owner-nav-panel">
-                        <div class="owner-config owner-settings-shell">
-                            <div class="owner-settings-subnav" id="owner-settings-subnav" aria-label="Settings sections">
-                                <div class="owner-subnav-buttons" id="owner-settings-subnav-buttons">
-                                    <button type="button" class="owner-subnav-btn" disabled aria-disabled="true">Loading sections…</button>
+                        <div id="nav-panel-settings" class="owner-nav-panel">
+                            <div class="owner-config">
+                                <div class="owner-settings-intro">
+                                    <h3>Template settings</h3>
+                                    <p>Edit every setting used by the selected template. Settings are grouped into logical sections below. Each section has its own <strong>Save</strong> and <strong>Reload</strong> buttons so you can make changes section by section without scrolling. Click an item in the left sidebar to jump straight to it.</p>
+                                    <span class="owner-settings-intro-tag" id="owner-config-mode-banner">Editing Multiple Products template</span>
                                 </div>
-                                <div class="owner-subnav-actions">
-                                    <button id="owner-config-save" class="btn btn-primary" type="button">Save settings</button>
-                                    <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload</button>
+                                <div id="owner-config-sections"></div>
+                                <div class="owner-config-footer">
+                                    <button id="owner-config-save" class="btn btn-primary" type="button">Save all settings</button>
+                                    <button id="owner-config-reset" class="btn btn-secondary" type="button">Reload all</button>
                                     <span id="owner-config-status" class="owner-save-status" role="status" aria-live="polite"></span>
                                 </div>
                             </div>
-                            <div>
-                                <h3 style="margin: 10px 0 4px;">Site configuration (advanced)</h3>
-                                <p class="owner-meta">This script is developed and owned by PMELAB TECHNOLOGY LIMITED. We reserve the full copyright. You can get in touch with us via SUPPORT@PAYMELAB.COM, WWW.PAYMELAB.COM, You can buy this script legally only from Simrapay.com or Paymelab.com. Edit every setting used by the selected template. For image fields, use the <strong>Upload Image</strong> button to upload directly to Cloudflare R2, or paste an existing URL.</p>
-                                <div class="owner-tabs" role="tablist" aria-label="Site configuration modes">
-                                    <button class="owner-tab active" type="button" data-config-mode="affiliate">Affiliate settings</button>
-                                    <button class="owner-tab" type="button" data-config-mode="multipleproducts">Multi settings</button>
-                                    <button class="owner-tab" type="button" data-config-mode="singleproduct">Single settings</button>
-                                </div>
-                                <div id="owner-config-sections"></div>
-                                <div class="owner-config-footer" style="display:none;" aria-hidden="true">
-                                    <button class="btn btn-primary" type="button" tabindex="-1" aria-hidden="true">Save settings</button>
-                                    <button class="btn btn-secondary" type="button" tabindex="-1" aria-hidden="true">Reload</button>
-                                    <span class="owner-save-status" role="status" aria-live="polite"></span>
-                                </div>
-                            </div>
                         </div>
-                    </div>
                         </div>
                     </div>
                 </div>
             </div>
+                    </div>
+                </div>
             </div>
-        </div>
+        </main>
+
+        <button type="button" class="owner-scroll-top" id="owner-scroll-top" aria-label="Back to top">
+            <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
     </div>
 
     <script src="js/config.js"></script>
