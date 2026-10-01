@@ -94,6 +94,14 @@ export default {
             return handleOwnerSiteSelectorSave(request, env);
         }
 
+        // Owner active-store mode (fast path): GET current, PUT switch + persist everywhere
+        if (path === '/api/owner/mode' && request.method === 'GET') {
+            return handleOwnerModeGet(request, env);
+        }
+        if (path === '/api/owner/mode' && request.method === 'PUT') {
+            return handleOwnerModeSave(request, env);
+        }
+
         // Owner image upload to R2
         if (path === '/api/owner/upload' && request.method === 'POST') {
             return handleOwnerImageUpload(request, env);
@@ -173,21 +181,20 @@ export default {
             }
         }
 
-        if (request.method === 'GET' && (path === '/' || path === '/index.html')) {
-            try {
-                const mode = await getSiteMode(env);
-                if (mode === 'multipleproducts') return Response.redirect('/multiple.html', 302);
-                if (mode === 'affiliate') return Response.redirect('/affiliate.html', 302);
-            } catch (err) {
-                    // Fall through: serve index.html normally on any error.
-                }
-            // singleproduct: serve index.html normally via ASSETS below
-        }
-
         if (request.method === 'GET') {
             try {
+                const activeMode = await getSiteMode(env);
+                const redirectHomeFor = function() {
+                    const t = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
+                    const qs = (new URL(request.url).search) || '';
+                    return Response.redirect(t + qs, 302);
+                };
+                if (path === '/' || path === '/index.html') {
+                    if (activeMode === 'multipleproducts' || activeMode === 'affiliate') {
+                        return redirectHomeFor();
+                    }
+                }
                 const storePages = {
-                    // .html variants + clean variants (both normalized above, but kept here for belt-and-suspenders):
                     '/multiple.html': 'multipleproducts',
                     '/multiple': 'multipleproducts',
                     '/affiliate.html': 'affiliate',
@@ -195,27 +202,24 @@ export default {
                     '/index.html': 'singleproduct',
                     '/checkout.html': 'singleproduct',
                     '/checkout': 'singleproduct',
-                    '/success.html': null, // allow all
+                    '/success.html': null,
                     '/success': null,
-                    '/payment-failed.html': null, // allow all
+                    '/payment-failed.html': null,
                     '/payment-failed': null,
                     '/cart-checkout.html': 'multipleproducts',
                     '/cart-checkout': 'multipleproducts'
                 };
                 const allowed = storePages[path];
-                if (allowed !== undefined) {
-                    const activeMode = await getSiteMode(env);
-                    if (typeof allowed === 'string' && activeMode !== allowed) {
-                        const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
-                        return Response.redirect(target, 302);
+                if (typeof allowed === 'string' && activeMode !== allowed) {
+                    return redirectHomeFor();
+                }
+                if (path === '/product-details.html' || path === '/product-details') {
+                    if (activeMode === 'affiliate' || activeMode === 'singleproduct') {
+                        return redirectHomeFor();
                     }
-                } else if (path === '/product-details.html' || path === '/product-details') {
-                    const activeMode = await getSiteMode(env);
-                    if (activeMode === 'affiliate') return Response.redirect('/affiliate.html', 302);
-                    if (activeMode === 'singleproduct') return Response.redirect('/index.html', 302);
                 }
             } catch (err) {
-                // On mode enforcement broke: serve whatever the requested ASSETs serve page below fallback serve page normally.
+                // Best-effort mode enforcement: fall through to normal asset serve on any internal error.
             }
         }
 
@@ -1592,6 +1596,68 @@ async function handleOwnerSiteSelectorSave(request, env) {
     }
 }
 
+async function handleOwnerModeGet(request, env) {
+    const authorized = isOwnerAuthorized(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    try {
+        const mode = await getSiteMode(env);
+        return jsonResponse({ success: true, mode: mode });
+    } catch (err) {
+        return jsonResponse({ success: false, error: err && err.message ? err.message : 'Unable to read active store mode' }, 500);
+    }
+}
+
+async function handleOwnerModeSave(request, env) {
+    const authorized = isOwnerAuthorized(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    if (!env || !env.OWNER_STATS) return jsonResponse({ success: false, error: 'Storage not configured' }, 503);
+    const body = await request.json().catch(function() { return null; });
+    const value = normalizeSiteMode(body && body.mode);
+    if (!value) return jsonResponse({ success: false, error: 'Invalid mode' }, 400);
+    try {
+        // (1) Update the site_selector.js KV override so it serves the chosen mode immediately.
+        try {
+            const read = await readSiteSelectorRaw(env);
+            var content = read && typeof read.text === 'string' ? read.text : '// site_selector.js override generated by mode switch\nconst WEBSITE_TYPE_SELECT = "' + value + '";\n';
+            content = String(content).replace(/\r\n/g, '\n');
+            const hasLine = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']+["']\s*;?/i.test(content);
+            if (hasLine) {
+                content = content.replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + value + '";');
+            } else {
+                content = 'const WEBSITE_TYPE_SELECT = "' + value + '";\n' + content;
+            }
+            await env.OWNER_STATS.put(SITE_SELECTOR_KV_KEY, content);
+            siteSelectorOverrideCache = content;
+        } catch (ssErr) {
+            // Fallback: still continue writing to site-config mirrors so the mode still applies on the
+            // KV-backed gating path even if site_selector override save unexpectedly fails.
+        }
+
+        // (2) Mirror WEBSITE_TYPE_SELECT to all three site-config buckets so getStoredSiteMode picks it up instantly.
+        const modes = ['singleproduct', 'multipleproducts', 'affiliate'];
+        for (const other of modes) {
+            try {
+                const existing = await getStoredConfig(env, other);
+                const next = Object.assign({}, existing || {}, { WEBSITE_TYPE_SELECT: value });
+                await env.OWNER_STATS.put('site-config-' + other, JSON.stringify(next));
+            } catch (e) {}
+        }
+
+        // (3) Bust all caches aggressively — every downstream path must see the new mode NOW.
+        siteConfigCache = { loadedAt: 0, key: '', value: null, promise: null };
+        siteModeCache = { loadedAt: 0, value: 'singleproduct', promise: null };
+        siteSelectorOverrideCache = null;
+
+        // (4) Re-read active mode to verify the persisted value is actually applied.
+        let verified = value;
+        try { verified = await getStoredSiteMode(env) || value; } catch (_vm) { verified = value; }
+
+        return jsonResponse({ success: true, mode: verified, activeMode: verified });
+    } catch (e) {
+        return jsonResponse({ success: false, error: e && e.message ? e.message : 'Unable to save active store mode' }, 500);
+    }
+}
+
 function unauthorizedResponse(error) {
     return new Response(JSON.stringify({ success: false, error: error }), {
         status: 401,
@@ -1656,12 +1722,18 @@ async function handlePublicConfigAsset(request, env, path) {
                 'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
             ];
             try {
-                const assignments = Object.keys(override).filter(function(key) {
+                const overrideKeys = Object.keys(override).filter(function(key) {
                     return safeNames.indexOf(key) >= 0;
-                }).map(function(key) {
+                });
+                const declarations = overrideKeys.map(function(key) {
+                    const isArr = Array.isArray(override[key]);
+                    const placeholder = isArr ? '[]' : '{}';
+                    return 'if (typeof ' + key + ' === "undefined") { try { const __tmp=' + placeholder + '; window.' + key + '=__tmp; if (typeof window.' + key + ' === "undefined") { var ' + key + ' = ' + placeholder + '; } } catch (_e) {} }';
+                }).join('\n');
+                const assignments = overrideKeys.map(function(key) {
                     return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
                 }).join('\n');
-                return new Response(String(text || '') + '\n' + assignments, { headers: noStoreHeaders });
+                return new Response(String(text || '') + '\n' + declarations + '\n' + assignments, { headers: noStoreHeaders });
             } catch (asgErr) {
                 return new Response(text, { headers: noStoreHeaders });
             }
@@ -2570,6 +2642,26 @@ async function getSiteMode(env) {
         }
 
         siteModeCache.promise = (async function() {
+            // Priority 1: read the site_selector.js KV override (owner's explicit mode switch)
+            try {
+                const override = await getStoredSiteSelectorOverride(env);
+                if (typeof override === 'string' && override.length > 0) {
+                    const cleaned = stripJsComments(override);
+                    const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
+                    const matches = Array.from(String(cleaned || '').matchAll(regex));
+                    const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
+                    const mode = (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct')
+                        ? (raw === 'sigleproduct' ? 'singleproduct' : raw)
+                        : null;
+                    if (mode) {
+                        siteModeCache.value = mode;
+                        siteModeCache.loadedAt = Date.now();
+                        return mode;
+                    }
+                }
+            } catch (_ss) {}
+
+            // Priority 2: use getStoredSiteMode which reads site-config-{mode} WEBSITE_TYPE_SELECT mirrors
             try {
                 const storedMode = await getStoredSiteMode(env);
                 if (storedMode && (storedMode === 'singleproduct' || storedMode === 'multipleproducts' || storedMode === 'affiliate')) {
@@ -2577,11 +2669,14 @@ async function getSiteMode(env) {
                     siteModeCache.loadedAt = Date.now();
                     return siteModeCache.value;
                 }
-                if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
-                    siteModeCache.value = 'singleproduct';
-                    siteModeCache.loadedAt = Date.now();
-                    return siteModeCache.value;
-                }
+            } catch (_sm) {}
+
+            // Priority 3: fall back to raw ASSETS site_selector.js file (hardcoded default: multipleproducts)
+            if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
+                siteModeCache.value = 'singleproduct';
+                siteModeCache.loadedAt = Date.now();
+                return siteModeCache.value;
+            }
 
                 var response = null;
                 // Try the safest forms supported by Pages ASSETS binding in both

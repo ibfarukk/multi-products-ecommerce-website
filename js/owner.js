@@ -680,14 +680,20 @@
     }
 
     async function loadModeGateOrDefault() {
-        var detected = 'multipleproducts';
+        var detected = null;
         try {
-            var cfg = await fetchConfig('singleproduct');
-            if (cfg && cfg.WEBSITE_TYPE_SELECT) {
-                var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
-                if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
-            }
-        } catch (e) {}
+            detected = await fetchActiveMode();
+        } catch (_m) { detected = null; }
+        if (!detected) {
+            detected = 'multipleproducts';
+            try {
+                var cfg = await fetchConfig('singleproduct');
+                if (cfg && cfg.WEBSITE_TYPE_SELECT) {
+                    var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
+                    if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
+                }
+            } catch (e) {}
+        }
         activeProductsMode = detected;
         configMode = detected;
         setModeGateCard(detected);
@@ -700,23 +706,35 @@
         setDashboardSubviews('main');
     }
 
+    async function fetchActiveMode() {
+        try {
+            var res = await fetch(getApiUrl('/api/owner/mode'), {
+                headers: { 'Authorization': 'Basic ' + getAuthToken() }
+            });
+            var data = await res.json().catch(function() { return null; });
+            if (res.ok && data && data.success && data.mode) return String(data.mode);
+        } catch (_e) {}
+        return null;
+    }
+
+    async function saveActiveMode(mode) {
+        var res = await fetch(getApiUrl('/api/owner/mode'), {
+            method: 'PUT',
+            headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: String(mode || '').toLowerCase() })
+        });
+        var data = await res.json().catch(function() { return null; });
+        if (!res.ok || !data || !data.success) throw new Error(data && data.error ? data.error : 'Unable to save store mode');
+        return String((data.activeMode || data.mode || mode || '')).toLowerCase();
+    }
+
     async function applyModeGate(mode) {
         var target = String(mode || '').toLowerCase();
         if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
         setModeGateStatus('Applying ' + target + '...');
         try {
-            // Persist (mirrored to all 3 KV buckets via worker handleOwnerConfigSave)
-            var cfg;
-            try { cfg = await fetchConfig(target); } catch (e) { cfg = {}; }
-            cfg.WEBSITE_TYPE_SELECT = target;
-            var res = await fetch(getApiUrl('/api/owner/config'), {
-                method: 'PUT',
-                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: target, config: cfg })
-            });
-            var data = await res.json().catch(function() { return {}; });
-            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to apply store mode');
-            // Sync every UI selector
+            var applied = await saveActiveMode(target);
+            if (applied) target = applied;
             activeProductsMode = target;
             configMode = target;
             setSiteModeSelectValue(target);
@@ -726,13 +744,11 @@
             });
             setSiteModeStatus('Applied ' + target + '. All views filtered to this mode.');
             setModeGateStatus('');
-            // Load filtered content for the chosen mode
             configValues = await fetchConfig(target);
             activeProductsConfig = configValues;
             renderConfig();
             setConfigStatus('');
             if (activeNavTab === 'products') renderProductsList();
-            // Refresh stats so dashboard is fresh
             try {
                 var stats = await fetchStats(getAuthToken());
                 renderStats(stats);
