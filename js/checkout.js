@@ -458,17 +458,57 @@
         setText('m-summary-total', totalText);
     }
 
-    async function verifyPayment(payload) {
-        const res = await fetch(getApiUrl('/api/verify-payment'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json().catch(function() { return {}; });
-        if (!res.ok || !data.success) {
-            throw new Error(data.error || 'Payment verification failed');
+    async function verifyPayment(payload, opts) {
+        const maxRetries = 3;
+        const backoffs = [900, 2200, 4500];
+        const bannerId = (opts && opts.bannerId) ? String(opts.bannerId) : '';
+        function setBanner(msg, color) {
+            try {
+                if (bannerId && typeof document !== 'undefined') {
+                    const node = document.getElementById(bannerId);
+                    if (node) {
+                        node.textContent = msg || '';
+                        node.style.color = (color === 'ok') ? '#065f46' : (color === 'warn') ? '#92400e' : '#b91c1c';
+                        node.style.display = msg ? 'block' : 'none';
+                    }
+                }
+            } catch (_e) {}
         }
-        return data;
+        let lastErr = null;
+        let lastData = {};
+        for (let i = 0; i <= maxRetries; i++) {
+            try {
+                const res = await fetch(getApiUrl('/api/verify-payment'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json().catch(function() { return {}; });
+                lastData = data || {};
+                if (res.ok && data.success) return data;
+                const txStatus = String((data && data.transaction_status) ? data.transaction_status : '').toLowerCase();
+                const retryable = (res.status === 409 ||
+                    res.status === 502 ||
+                    (data && data.retryable === true) ||
+                    ['pending','processing','ongoing','queued','unknown'].indexOf(txStatus) >= 0);
+                if (retryable && i < maxRetries) {
+                    const waitMs = backoffs[i] || 2500;
+                    const msg = 'Attempt ' + (i + 2) + '/' + (maxRetries + 1) + ': confirming transaction is settling… retrying in ' + Math.round(waitMs/100)/10 + 's';
+                    setBanner(msg, 'warn');
+                    await new Promise(function(r){ setTimeout(r, waitMs); });
+                    continue;
+                }
+                const e = new Error((data && data.error ? data.error : ('Payment verification failed (HTTP ' + res.status + ')')));
+                e.verifyData = lastData;
+                throw e;
+            } catch (err) {
+                lastErr = err;
+                if (!err || err.verifyData) {} else { lastErr.verifyData = lastData; }
+            }
+        }
+        lastErr = lastErr || new Error('Payment verification failed');
+        lastErr.verifyData = Object.assign({}, lastData, lastErr && lastErr.verifyData ? lastErr.verifyData : {});
+        throw lastErr;
     }
 
     async function submitManualOrder(payload, receiptFile) {

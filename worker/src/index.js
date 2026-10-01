@@ -207,6 +207,16 @@ function b64dec(s) {
 }
 function te(s) { return new TextEncoder().encode(String(s == null ? '' : s)); }
 function td(b) { return new TextDecoder('utf-8').decode(b); }
+function sleep(ms) { return new Promise(function(resolve) { setTimeout(resolve, Math.max(0, ms|0)); }); }
+function isPendingStatus(s) {
+    const x = String(s || '').toLowerCase();
+    return x === 'pending' || x === 'ongoing' || x === 'processing' || x === 'queued' || x === 'unknown';
+}
+function amountsCloseKobo(aKobo, bKobo, tolerance) {
+    const tol = typeof tolerance === 'number' ? tolerance : 1;
+    const d = Math.abs(Number(aKobo||0) - Number(bKobo||0));
+    return d <= tol;
+}
 
 // ---- Key derivation from LICENCE_CODE ------------------------------
 // Returns a CryptoKey (AES-GCM, extractable=false, encrypt+decrypt)
@@ -1168,36 +1178,133 @@ async function handleVerifyPayment(request, env) {
                 resolvedPackageTitle = resolvedPackageTitle || String(resolved.pkg.title || resolved.pkg.id || package_id);
             }
 
-            const verifyResult = await verifyFlutterwaveTransaction(reference, secret);
-            if (!verifyResult.status) {
-                const message = String(verifyResult.message || 'Transaction not found');
-                const hint = getFlutterwaveFailureHint(message);
-                const retryable = isRetryableFlutterwaveFailure(message);
-                if (retryable) {
-                    return jsonResponse({
-                        success: false, error: message, retryable: true, hint: hint || undefined, provider: 'flutterwave'
+            const retryDelays = [700, 1700, 2900]; // ms
+            let lastVerify = null;
+            let lastTransaction = null;
+            let lastStatusCode = 404;
+            let lastResponse = null;
+            let settled = false;
+            for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+                const verifyResult = await verifyFlutterwaveTransaction(reference, secret);
+                lastVerify = verifyResult;
+                if (!verifyResult.status) {
+                    const message = String(verifyResult.message || 'Transaction not found');
+                    const hint = getFlutterwaveFailureHint(message);
+                    const retryable = isRetryableFlutterwaveFailure(message);
+                    lastStatusCode = retryable ? 409 : 404;
+                    lastResponse = {
+                        success: false, error: message, retryable: retryable, hint: hint || undefined, provider: 'flutterwave'
+                    };
+                    if (retryable && attempt < retryDelays.length) {
+                        await sleep(retryDelays[attempt]);
+                        continue;
+                    }
+                    lastTransaction = null;
+                    break;
+                }
+                const transaction = verifyResult.data;
+                lastTransaction = transaction;
+                const statusStr = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
+                if (isPendingStatus(statusStr)) {
+                    lastStatusCode = 409;
+                    lastResponse = {
+                        success: false,
+                        error: 'Payment confirmation is still pending',
+                        retryable: true,
+                        transaction_status: statusStr,
+                        provider: 'flutterwave'
+                    };
+                    if (attempt < retryDelays.length) {
+                        await sleep(retryDelays[attempt]);
+                        continue;
+                    }
+                    break;
+                }
+                const statusOk = statusStr === 'success';
+                const receivedUnit = flutterwaveAmountToUnit(transaction && transaction.amount);
+                const receivedUnitKobo = Math.round(receivedUnit * 100);
+                const expectedKobo = Math.round(expectedAmount * 100);
+                const amountOk = amountsCloseKobo(receivedUnitKobo, expectedKobo, 1);
+                const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
+                const currencyOk = !receivedCurrency || receivedCurrency === expectedCurrency || expectedCurrency === 'NGN' && !receivedCurrency;
+                if (statusOk && amountOk && currencyOk) {
+                    settled = true;
+                    break;
+                }
+                // Final (non-retryable) status, amount or currency mismatch — exit loop with last values
+                break;
+            }
+            if (!settled) {
+                if (lastVerify && !lastVerify.status) {
+                    const message = String(lastVerify.message || 'Transaction not found');
+                    const hint = lastResponse && lastResponse.hint;
+                    const retryable = lastResponse && lastResponse.retryable;
+                    if (retryable) {
+                        return jsonResponse(lastResponse, 409);
+                    }
+                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                    await sendOrderNotifications(env, {
+                        event: 'flutterwave_attempt_failed',
+                        title: 'Flutterwave verification failed',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                    });
+                    return jsonResponse(lastResponse || {
+                        success: false, error: message, retryable: false, hint: hint || undefined, provider: 'flutterwave'
+                    }, 404);
+                }
+                const transaction = lastTransaction;
+                const statusStr = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
+                if (isPendingStatus(statusStr)) {
+                    return jsonResponse(lastResponse || {
+                        success: false, error: 'Payment confirmation is still pending', retryable: true,
+                        transaction_status: statusStr, provider: 'flutterwave'
                     }, 409);
                 }
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'flutterwave_attempt_failed',
-                    title: 'Flutterwave verification failed',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
-                });
-                return jsonResponse({ success: false, error: message, retryable: false, hint: hint || undefined, provider: 'flutterwave' }, 404);
-            }
-
-            const transaction = verifyResult.data;
-            const statusOk = transaction && String(transaction.status || '').toLowerCase() === 'success';
-            if (!statusOk) {
-                const status = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
-                if (status === 'pending' || status === 'ongoing' || status === 'processing' || status === 'queued' || status === 'unknown') {
-                    return jsonResponse({ success: false, error: 'Payment confirmation is still pending', retryable: true, transaction_status: status, provider: 'flutterwave' }, 409);
+                const statusOk = statusStr === 'success';
+                const receivedUnit = flutterwaveAmountToUnit(transaction && transaction.amount);
+                const receivedUnitKobo = Math.round(receivedUnit * 100);
+                const expectedKobo = Math.round(expectedAmount * 100);
+                const amountOk = amountsCloseKobo(receivedUnitKobo, expectedKobo, 1);
+                const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
+                const currencyOk = receivedCurrency === expectedCurrency;
+                if (statusOk && !amountOk) {
+                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                    await sendOrderNotifications(env, {
+                        event: 'flutterwave_attempt_failed',
+                        title: 'Flutterwave amount mismatch',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: [
+                            'Expected: ' + expectedAmount + ' ' + expectedCurrency,
+                            'Received: ' + receivedUnit + ' ' + receivedCurrency
+                        ]
+                    });
+                    return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false, provider: 'flutterwave' }, 400);
+                }
+                if (statusOk && !currencyOk) {
+                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                    await sendOrderNotifications(env, {
+                        event: 'flutterwave_attempt_failed',
+                        title: 'Flutterwave currency mismatch',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: [
+                            'Expected currency: ' + expectedCurrency,
+                            'Received currency: ' + receivedCurrency
+                        ]
+                    });
+                    return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false, provider: 'flutterwave' }, 400);
                 }
                 await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
                 await sendOrderNotifications(env, {
@@ -1208,51 +1315,12 @@ async function handleVerifyPayment(request, env) {
                     amount: expectedAmount,
                     currency: expectedCurrency,
                     customer: customer,
-                    details: ['Transaction status: ' + status]
+                    details: ['Transaction status: ' + statusStr]
                 });
-                return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: status, retryable: false, provider: 'flutterwave' }, 400);
+                return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: statusStr, retryable: false, provider: 'flutterwave' }, 400);
             }
 
-            const receivedUnit = flutterwaveAmountToUnit(transaction.amount);
-            const receivedUnitKobo = Math.round(receivedUnit * 100);
-            const expectedKobo = Math.round(expectedAmount * 100);
-            if (receivedUnitKobo !== expectedKobo) {
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'flutterwave_attempt_failed',
-                    title: 'Flutterwave amount mismatch',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: [
-                        'Expected: ' + expectedAmount + ' ' + expectedCurrency,
-                        'Received: ' + receivedUnit + ' ' + String(transaction.currency || '').toUpperCase()
-                    ]
-                });
-                return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false, provider: 'flutterwave' }, 400);
-            }
-
-            const receivedCurrency = String(transaction.currency || '').toUpperCase();
-            if (receivedCurrency !== expectedCurrency) {
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'flutterwave_attempt_failed',
-                    title: 'Flutterwave currency mismatch',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: [
-                        'Expected currency: ' + expectedCurrency,
-                        'Received currency: ' + receivedCurrency
-                    ]
-                });
-                return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false, provider: 'flutterwave' }, 400);
-            }
-
+            const transaction = lastTransaction;
             const result = await confirmFlutterwavePayment(env, {
                 transaction: transaction,
                 packageId: resolvedPackageId,
@@ -1343,57 +1411,129 @@ async function handleVerifyPayment(request, env) {
             resolvedPackageTitle = resolvedPackageTitle || String(resolved.pkg.title || resolved.pkg.id || package_id);
         }
 
-        const verifyResult = await verifyPaystackTransaction(reference, secret);
-        if (!verifyResult.status) {
-            const message = String(verifyResult.message || 'Transaction not found');
-            const hint = getPaystackFailureHint(message);
-            const retryable = isRetryablePaystackFailure(message);
-
-            if (retryable) {
-                return jsonResponse({
-                    success: false,
-                    error: message,
-                    retryable: true,
-                    hint: hint || undefined
-                }, 409);
+        // === Existing Paystack verification path (with retries) ===
+        const retryDelaysPs = [700, 1700, 2900];
+        let lastVerifyPs = null;
+        let lastTransactionPs = null;
+        let lastResponsePs = null;
+        let settledPs = false;
+        for (let attempt = 0; attempt <= retryDelaysPs.length; attempt++) {
+            const verifyResult = await verifyPaystackTransaction(reference, secret);
+            lastVerifyPs = verifyResult;
+            if (!verifyResult.status) {
+                const message = String(verifyResult.message || 'Transaction not found');
+                const hint = getPaystackFailureHint(message);
+                const retryable = isRetryablePaystackFailure(message);
+                lastResponsePs = {
+                    success: false, error: message, retryable: retryable, hint: hint || undefined
+                };
+                if (retryable && attempt < retryDelaysPs.length) {
+                    await sleep(retryDelaysPs[attempt]);
+                    continue;
+                }
+                lastTransactionPs = null;
+                break;
             }
-
-            await updateOwnerStats(env, function(stats) {
-                stats.failedSalesCount += 1;
-            });
-            await sendOrderNotifications(env, {
-                event: 'paystack_attempt_failed',
-                title: 'Paystack verification failed',
-                orderRef: reference,
-                packageId: package_id,
-                amount: expectedAmount,
-                currency: expectedCurrency,
-                customer: customer,
-                details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
-            });
-            return jsonResponse({
-                success: false,
-                error: message,
-                retryable: false,
-                hint: hint || undefined
-            }, 404);
-        }
-
-        const transaction = verifyResult.data;
-        if (!transaction || transaction.status !== 'success') {
-            const status = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
-            if (status === 'pending' || status === 'ongoing' || status === 'processing' || status === 'queued' || status === 'unknown') {
-                return jsonResponse({
+            const transaction = verifyResult.data;
+            lastTransactionPs = transaction;
+            const statusStr = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
+            if (isPendingStatus(statusStr)) {
+                lastResponsePs = {
                     success: false,
                     error: 'Payment confirmation is still pending',
                     retryable: true,
-                    transaction_status: status
+                    transaction_status: statusStr
+                };
+                if (attempt < retryDelaysPs.length) {
+                    await sleep(retryDelaysPs[attempt]);
+                    continue;
+                }
+                break;
+            }
+            const statusOk = statusStr === 'success';
+            const expectedKobo = Math.round(expectedAmount * 100);
+            const receivedKobo = Number(transaction && transaction.amount ? transaction.amount : 0);
+            const amountOk = amountsCloseKobo(receivedKobo, expectedKobo, 1);
+            const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
+            const currencyOk = !receivedCurrency || receivedCurrency === expectedCurrency || (expectedCurrency === 'NGN' && !receivedCurrency);
+            if (statusOk && amountOk && currencyOk) {
+                settledPs = true;
+                break;
+            }
+            break;
+        }
+        if (!settledPs) {
+            if (lastVerifyPs && !lastVerifyPs.status) {
+                const message = String(lastVerifyPs.message || 'Transaction not found');
+                const hint = lastResponsePs && lastResponsePs.hint;
+                const retryable = lastResponsePs && lastResponsePs.retryable;
+                if (retryable) {
+                    return jsonResponse(lastResponsePs, 409);
+                }
+                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                await sendOrderNotifications(env, {
+                    event: 'paystack_attempt_failed',
+                    title: 'Paystack verification failed',
+                    orderRef: reference,
+                    packageId: package_id,
+                    amount: expectedAmount,
+                    currency: expectedCurrency,
+                    customer: customer,
+                    details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                });
+                return jsonResponse(lastResponsePs || {
+                    success: false, error: message, retryable: false, hint: hint || undefined
+                }, 404);
+            }
+            const transaction = lastTransactionPs;
+            const statusStr = String(transaction && transaction.status ? transaction.status : 'unknown').toLowerCase();
+            if (isPendingStatus(statusStr)) {
+                return jsonResponse(lastResponsePs || {
+                    success: false, error: 'Payment confirmation is still pending',
+                    retryable: true, transaction_status: statusStr
                 }, 409);
             }
-
-            await updateOwnerStats(env, function(stats) {
-                stats.failedSalesCount += 1;
-            });
+            const statusOk = statusStr === 'success';
+            const expectedKobo = Math.round(expectedAmount * 100);
+            const receivedKobo = Number(transaction && transaction.amount ? transaction.amount : 0);
+            const amountOk = amountsCloseKobo(receivedKobo, expectedKobo, 1);
+            const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
+            const currencyOk = receivedCurrency === expectedCurrency;
+            if (statusOk && !amountOk) {
+                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                await sendOrderNotifications(env, {
+                    event: 'paystack_attempt_failed',
+                    title: 'Paystack amount mismatch',
+                    orderRef: reference,
+                    packageId: package_id,
+                    amount: expectedAmount,
+                    currency: expectedCurrency,
+                    customer: customer,
+                    details: [
+                        'Expected: ' + expectedAmount + ' ' + expectedCurrency,
+                        'Received: ' + (receivedKobo / 100) + ' ' + receivedCurrency
+                    ]
+                });
+                return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false }, 400);
+            }
+            if (statusOk && !currencyOk) {
+                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
+                await sendOrderNotifications(env, {
+                    event: 'paystack_attempt_failed',
+                    title: 'Paystack currency mismatch',
+                    orderRef: reference,
+                    packageId: package_id,
+                    amount: expectedAmount,
+                    currency: expectedCurrency,
+                    customer: customer,
+                    details: [
+                        'Expected currency: ' + expectedCurrency,
+                        'Received currency: ' + receivedCurrency
+                    ]
+                });
+                return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false }, 400);
+            }
+            await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
             await sendOrderNotifications(env, {
                 event: 'paystack_attempt_failed',
                 title: 'Paystack payment not completed',
@@ -1402,54 +1542,12 @@ async function handleVerifyPayment(request, env) {
                 amount: expectedAmount,
                 currency: expectedCurrency,
                 customer: customer,
-                details: ['Transaction status: ' + status]
+                details: ['Transaction status: ' + statusStr]
             });
-            return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: status, retryable: false }, 400);
+            return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: statusStr, retryable: false }, 400);
         }
 
-        const expectedKobo = Math.round(expectedAmount * 100);
-        const receivedKobo = Number(transaction.amount || 0);
-        if (receivedKobo !== expectedKobo) {
-            await updateOwnerStats(env, function(stats) {
-                stats.failedSalesCount += 1;
-            });
-            await sendOrderNotifications(env, {
-                event: 'paystack_attempt_failed',
-                title: 'Paystack amount mismatch',
-                orderRef: reference,
-                packageId: package_id,
-                amount: expectedAmount,
-                currency: expectedCurrency,
-                customer: customer,
-                details: [
-                    'Expected: ' + expectedAmount + ' ' + expectedCurrency,
-                    'Received: ' + (receivedKobo / 100) + ' ' + String(transaction.currency || '').toUpperCase()
-                ]
-            });
-            return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false }, 400);
-        }
-
-        const receivedCurrency = String(transaction.currency || '').toUpperCase();
-        if (receivedCurrency !== expectedCurrency) {
-            await updateOwnerStats(env, function(stats) {
-                stats.failedSalesCount += 1;
-            });
-            await sendOrderNotifications(env, {
-                event: 'paystack_attempt_failed',
-                title: 'Paystack currency mismatch',
-                orderRef: reference,
-                packageId: package_id,
-                amount: expectedAmount,
-                currency: expectedCurrency,
-                customer: customer,
-                details: [
-                    'Expected currency: ' + expectedCurrency,
-                    'Received currency: ' + receivedCurrency
-                ]
-            });
-            return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false }, 400);
-        }
-
+        const transaction = lastTransactionPs;
         const result = await confirmPaystackPayment(env, {
             transaction: transaction,
             packageId: resolvedPackageId,

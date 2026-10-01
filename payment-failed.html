@@ -130,20 +130,38 @@
                 return base.replace(/\/+$/, '') + cleanPath;
             }
 
-            function setStatus(message) {
+            function setStatus(message, severity) {
                 if (!statusBox) return;
                 statusBox.textContent = message;
                 statusBox.classList.add('active');
+                statusBox.style.color = severity === 'warn' ? '#92400e' : (severity === 'success' ? '#166534' : '#0f172a');
+                statusBox.style.fontWeight = severity === 'success' ? '700' : '500';
             }
 
             if (!reference) return;
 
             let attempts = 0;
-            const maxAttempts = 6;
+            const maxAttempts = 10;
+            const intervalMs = 2500;
+
+            function isPaid(data) {
+                const rec = data && data.record ? data.record : null;
+                if (!rec) return false;
+                const ps = String(rec.paymentStatus || '').toLowerCase();
+                if (ps === 'verified' || ps === 'paid' || ps === 'captured' || ps === 'success') return true;
+                const st = String(rec.status || '').toLowerCase();
+                if (st === 'verified' || st === 'paid' || st === 'captured' || st === 'success') return true;
+                return rec.paid === true || rec.verified === true;
+            }
 
             function checkStatus() {
                 attempts += 1;
-                setStatus('We are rechecking your payment confirmation. Please wait...');
+                const left = Math.max(0, maxAttempts - attempts);
+                setStatus(
+                    'Rechecking payment confirmation (attempt ' + attempts + '/' + maxAttempts + '). ' +
+                    (left ? 'Next check in ' + Math.round(intervalMs/100)/10 + 's…' : 'Finishing final check…'),
+                    'warn'
+                );
 
                 fetch(getApiUrl('/api/payment-status?ref=' + encodeURIComponent(reference)))
                     .then(function(res) {
@@ -152,30 +170,40 @@
                         });
                     })
                     .then(function(data) {
-                        const record = data && data.record ? data.record : null;
-                        if (data.success && record && record.paymentStatus === 'verified') {
-                            const pkg = record.packageId || params.get('pkg') || 'single';
-                            window.location.replace('success.html?ref=' + encodeURIComponent(reference) + '&pkg=' + encodeURIComponent(pkg));
+                        if (data && isPaid(data)) {
+                            const pkg = (data.record && data.record.packageId) || params.get('pkg') || 'single';
+                            setStatus('✅ Payment confirmed. Redirecting to Order Confirmed…', 'success');
+                            window.setTimeout(function() {
+                                window.location.replace('success.html?ref=' + encodeURIComponent(reference) + '&pkg=' + encodeURIComponent(pkg));
+                            }, 900);
                             return;
                         }
 
                         if (attempts < maxAttempts && (!data || data.retryable !== false)) {
-                            window.setTimeout(checkStatus, 2000);
+                            window.setTimeout(checkStatus, intervalMs);
                             return;
                         }
 
-                        setStatus('We could not confirm this payment automatically yet. If you already paid successfully, please wait a moment and try again.');
+                        setStatus(
+                            'We could not confirm this payment automatically yet. ' +
+                            'If your bank/card has been charged, the provider is still settling the transaction — it usually completes within 60 seconds. ' +
+                            'Refresh the page or click Try again; the system will confirm it shortly.',
+                            'warn'
+                        );
                     })
                     .catch(function() {
                         if (attempts < maxAttempts) {
-                            window.setTimeout(checkStatus, 2000);
+                            window.setTimeout(checkStatus, intervalMs);
                             return;
                         }
-                        setStatus('We could not confirm this payment automatically yet. If you already paid successfully, please wait a moment and try again.');
+                        setStatus(
+                            'Could not reach the payment status checker. Check your connection and try again — if charged, the transaction will confirm shortly.',
+                            'warn'
+                        );
                     });
             }
 
-            window.setTimeout(checkStatus, 800);
+            window.setTimeout(checkStatus, 600);
         })();
     </script>
 </body>
