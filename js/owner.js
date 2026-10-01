@@ -90,7 +90,76 @@
         });
         var data = await response.json().catch(function() { return {}; });
         if (!response.ok || !data.success) throw new Error(data.error || 'Unable to load configuration');
-        return data.config || {};
+        var raw = data.config || {};
+        // DEFENSIVE DEFAULT FILLER: If Worker handleOwnerConfig's ASSETS.fetch threw
+        // (deployed Pages env rejects synthetic URLs), then FAQ/WHATSAPP_NUMBERS/SOCIAL_LINKS/
+        // NAVIGATION/LOGO/FOOTER_LINKS/SEO etc. come back as null → they get filtered out
+        // by renderConfig() Object.keys → isConfigSectionVisibleForMode → sidebar & sections missing.
+        // Always inject empty-object-or-array defaults so the sections render regardless.
+        var filled = typeof raw === 'object' && raw !== null ? Object.assign({}, raw) : {};
+        var safeFill = function(key, fallback) {
+            if (filled[key] === null || filled[key] === undefined || typeof filled[key] !== typeof fallback) {
+                filled[key] = fallback;
+            }
+        };
+        safeFill('BUSINESS', { name: '', shortName: '', phone: '', email: '', address: '', city: '', state: '', country: '' });
+        safeFill('BRAND', { primary: '#16a34a', secondary: '#0f766e', accent: '#f59e0b' });
+        safeFill('COMPANY', { enabled: true, title: '', description: '', mission: '', values: [] });
+        safeFill('CONTACT', { enabled: true, title: '', subtitle: '', showMap: false, mapEmbedUrl: '' });
+        safeFill('STORE_CONTENT', {});
+        safeFill('FAQ', [
+            { enabled: true, question: 'How long does delivery take?', answer: 'Typically 1–5 business days depending on your location within Nigeria.' },
+            { enabled: true, question: 'What payment methods are supported?', answer: 'We accept Paystack, Flutterwave, and manual verified bank transfer.' },
+            { enabled: true, question: 'How do I reach support?', answer: 'Chat with us on WhatsApp by clicking the floating button or use our contact details.' },
+            { enabled: true, id: 'faq-privacy-policy', question: 'Privacy Policy', answer: 'We only collect information needed to process orders and provide support.' },
+            { enabled: true, id: 'faq-terms-and-conditions', question: 'Terms & Conditions', answer: 'Orders are subject to availability and our standard terms.' },
+            { enabled: true, id: 'faq-refund-policy', question: 'Refund Policy', answer: 'We handle returns and refunds within our policy window — contact us for help.' },
+            { enabled: true, id: 'faq-delivery-policy', question: 'Delivery Policy', answer: 'Physical orders ship after payment confirmation.' }
+        ]);
+        safeFill('TESTIMONIALS', [{ enabled: true, name: 'Customer', rating: 5, text: 'Great experience!', verifiedBuyer: true, image: '', location: '' }]);
+        safeFill('WHATSAPP_NUMBERS', [
+            { enabled: true, label: 'Sales', number: '' },
+            { enabled: true, label: 'Support', number: '' }
+        ]);
+        safeFill('SOCIAL_LINKS', { instagram: '', facebook: '', tiktok: '', youtube: '', twitter: '' });
+        safeFill('LOGO', { type: 'text', text: '', image: '', alt: '' });
+        safeFill('NAVIGATION', [
+            { label: 'Home', href: '#home' },
+            { label: 'Products', href: '#products' },
+            { label: 'FAQ', href: '#faq' },
+            { label: 'About', href: 'about.html' },
+            { label: 'Contact', href: 'contact.html' }
+        ]);
+        safeFill('FOOTER_LINKS', {
+            quickLinks: [{ label: 'Home', href: '#home' }, { label: 'Products', href: '#products' }, { label: 'FAQ', href: '#faq' }, { label: 'About', href: 'about.html' }, { label: 'Contact', href: 'contact.html' }],
+            legalLinks: [{ label: 'Privacy Policy', href: '#faq-privacy-policy' }, { label: 'Terms & Conditions', href: '#faq-terms-and-conditions' }, { label: 'Refund Policy', href: 'refund-policy.html' }, { label: 'Delivery Policy', href: '#faq-delivery-policy' }]
+        });
+        safeFill('SEO', { title: '', description: '', keywords: '', canonicalUrl: '', socialImage: '' });
+        safeFill('ANALYTICS', { googleAnalyticsId: '', metaPixelId: '', googleTagManagerId: '' });
+        safeFill('SALES_POPUP', { enabled: false, intervalSeconds: 25, displaySeconds: 5, initialDelaySeconds: 6, titlePrefix: '', amountLabel: '', names: [] });
+        safeFill('PROMOTION', { enabled: false, title: '', description: '', endDate: '' });
+        safeFill('SOCIAL_PROOF_GALLERY', { enabled: false, title: '', description: '', images: [] });
+        safeFill('TRUST_BADGES', []);
+        safeFill('GUARANTEE', { enabled: true, title: '', items: [] });
+        safeFill('DELIVERY', { enabled: true, title: '', description: '', estimatedTime: '', feeText: '', note: '' });
+        safeFill('FEATURES', []);
+        safeFill('WHY_CHOOSE', { enabled: false, title: '', items: [] });
+        safeFill('STICKY_CTA', { enabled: true, text: '', whatsappText: '' });
+        safeFill('HERO_TRUST', []);
+        safeFill('ABOUT_PRODUCT', { enabled: false, title: '', description: '' });
+        safeFill('PAYMENT', { paystackEnabled: false, flutterwaveEnabled: false, manualEnabled: true, manualReceiptRequired: false, paystackPublicKey: '', flutterwavePublicKey: '', currency: 'NGN' });
+        safeFill('MANUAL_PAYMENT', { bankName: '', accountName: '', accountNumber: '', instructions: '', verificationNumber: '' });
+        safeFill('PRODUCT', { title: '', shortTitle: '', description: '', longDescription: '', price: 0, oldPrice: 0, productType: '' });
+        safeFill('PRODUCT_TYPE', 'physical');
+        safeFill('PRODUCT_IMAGES', []);
+        safeFill('PRODUCT_VIDEOS', []);
+        safeFill('SPECIFICATIONS', []);
+        safeFill('PACKAGES', []);
+        safeFill('PRODUCTS', []);
+        safeFill('AFFILIATE_PRODUCTS', []);
+        safeFill('API_BASE_URL', '');
+        safeFill('WEBSITE_TYPE_SELECT', 'singleproduct');
+        return filled;
     }
 
     function pathParts(path) {
