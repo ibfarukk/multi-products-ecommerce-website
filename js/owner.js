@@ -2795,9 +2795,19 @@
                 var s = (typeof data.saved === 'number' ? data.saved : (typeof r.saved === 'number' ? r.saved : changedCount));
                 var c = (typeof data.cleared === 'number' ? data.cleared : (typeof r.cleared === 'number' ? r.cleared : clearedCount));
                 var k = (typeof data.skipped === 'number' ? data.skipped : (Array.isArray(r.skipped) ? r.skipped.length : (typeof r.skipped === 'number' ? r.skipped : 0)));
-                setStatus('✅ Saved ' + s + ' field' + (s === 1 ? '' : 's') + (c ? ' · ' + c + ' cleared' : '') + (k ? ' · ' + k + ' unchanged (masked passwords skipped)' : '') + ' — encryption confirmed.', false);
+                var e = (typeof data.errors === 'number' ? data.errors : (typeof r.errors === 'number' ? r.errors : 0));
+                var ok = (s + c) > 0 && e === 0;
+                var parts = [];
+                parts.push((ok ? '✅ ' : '⚠️ ') + 'Saved ' + s + ' field' + (s === 1 ? '' : 's'));
+                if (c) parts.push(c + ' cleared');
+                if (k) parts.push(k + ' unchanged');
+                if (e) parts.push(e + ' ERROR' + (e === 1 ? '' : 'S'));
+                var tail = ok
+                    ? ' — encrypted & persisted.'
+                    : (e ? ' — some fields failed. Open browser DevTools Network to inspect /api/owner/system/config response.' : ' — no new values written.');
+                setStatus(parts.join(' · ') + tail, !ok);
                 setBusy(false);
-                window.setTimeout(function() { setStatus('', false); }, 7500);
+                window.setTimeout(function() { if (ok) setStatus('', false); }, ok ? 9000 : 20000);
             } catch (err) {
                 setBusy(false);
                 setStatus('❌ Save failed: ' + (err && err.message ? String(err.message) : 'Unknown error'), true);
