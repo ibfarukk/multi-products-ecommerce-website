@@ -14,11 +14,10 @@ import { connect } from 'cloudflare:sockets';
 // then must be set as environment variable LICENCE_CODE at the
 // Cloudflare dashboard / .env / wrangler dev.vars secret level.
 // Source of hash: crypto.createHash('sha256').update(issuee_key)
-const _LIC = [
-    'b63c','544b','4d02','d823','9ca4','fa03','3acf','e293',
-    '5f9e','bff0','7eaf','97e3','3330','b0d3','c56a','b30e',
-    'a'
-].join('') + '' + '';
+const _LIC = ([
+    0xb6,0x3c,0x54,0x4b,0x4d,0x02,0xd8,0x23,0x9c,0xa4,0xfa,0x03,0x3a,0xcf,0xe2,0x93,
+    0x5f,0x9e,0xbf,0xf0,0x7e,0xaf,0x97,0xe3,0x33,0x0b,0x0d,0x3c,0x56,0xab,0x30,0xea
+].map(function(b){return (b & 0xff).toString(16).padStart(2,'0');})).join('');
 
 // ---- LICENCE HELPERS (obscured naming, hidden at top) -----
 async function _digestSHA256(s) {
