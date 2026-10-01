@@ -2625,7 +2625,7 @@
                     pill.innerHTML = '🔒&nbsp;Cloudflare Variable · readonly';
                     input.title = 'This value is set as a Cloudflare environment variable and takes priority. To change it, edit Cloudflare Dashboard → Variables.';
                 } else if (f.source === 'Owner Dashboard') {
-                    pill.innerHTML = '⚙️&nbsp;Owner Dashboard · saved';
+                    pill.innerHTML = '⚙️&nbsp;Key Set · Owner Dashboard';
                 } else {
                     pill.innerHTML = '🟢&nbsp;Unset';
                 }
@@ -2746,34 +2746,58 @@
                 lastSystemConfig.order = data.order || [];
                 lastSystemConfig.fetchedAt = Date.now();
 
+                var appliedUpdates = 0;
+                var expectedUpdates = 0;
                 if (data.groups && Object.keys(data.groups).length) {
                     var latestGroups = data.groups;
-                    var latestOrder = data.order || Object.keys(latestGroups);
+                    var latestOrder = (data.order && data.order.length) ? data.order : Object.keys(latestGroups);
                     latestOrder.forEach(function(gn) {
                         (latestGroups[gn] || []).forEach(function(f) {
+                            expectedUpdates++;
                             var key = String(f.key || '');
                             var nodeInfo = fieldNodesByKey[key];
                             if (!nodeInfo) return;
                             var inp = nodeInfo.input;
                             var pill = nodeInfo.pill;
-                            inp.value = (f.value && typeof f.value === 'string') ? f.value : '';
-                            inp.setAttribute('data-initial', inp.value);
+                            var prevSource = nodeInfo.def.source || '';
+                            var prevValue = inp.value || '';
+                            var newValue = (f.value && typeof f.value === 'string') ? f.value : '';
+                            inp.value = newValue;
+                            inp.setAttribute('data-initial', newValue);
+                            nodeInfo.def.source = f.source || prevSource;
+                            nodeInfo.def.storedSet = !!f.storedSet;
+                            nodeInfo.def.envSet = !!f.envSet;
                             if (f.envSet) inp.setAttribute('readonly', 'readonly');
                             else inp.removeAttribute('readonly');
                             pill.className = 'owner-syscfg-pill ' + (f.envSet ? 'owner-syscfg-pill-cloudflare' : (f.source === 'Owner Dashboard' ? 'owner-syscfg-pill-dashboard' : 'owner-syscfg-pill-unset'));
                             if (f.envSet) pill.innerHTML = '🔒&nbsp;Cloudflare Variable · readonly';
-                            else if (f.source === 'Owner Dashboard') pill.innerHTML = '⚙️&nbsp;Owner Dashboard · saved';
+                            else if (f.source === 'Owner Dashboard') pill.innerHTML = '⚙️&nbsp;Key Set · Owner Dashboard';
                             else pill.innerHTML = '🟢&nbsp;Unset';
+                            if (prevSource !== f.source || prevValue !== newValue) {
+                                appliedUpdates++;
+                                try {
+                                    pill.animate([{ transform: 'scale(1)', boxShadow: 'none' }, { transform: 'scale(1.1)', boxShadow: '0 6px 16px rgba(16,185,129,0.35)' }, { transform: 'scale(1)', boxShadow: 'none' }], { duration: 480, easing: 'ease-out' });
+                                } catch (_anim) { /* noop */ }
+                            }
                         });
                     });
                 }
 
-                var s = (typeof data.saved === 'number' ? data.saved : changedCount);
-                var c = (typeof data.cleared === 'number' ? data.cleared : clearedCount);
-                var k = (typeof data.skipped === 'number' ? data.skipped : 0);
+                // Force-refresh UI if any in-place update failed (e.g. DOM node stale)
+                if (expectedUpdates > 0 && appliedUpdates === 0) {
+                    try {
+                        var fresh = renderSystemConfigSection((data.order && data.order.length) ? data.order : Object.keys(lastSystemConfig.groups), lastSystemConfig.groups);
+                        if (wrap.parentNode) wrap.parentNode.replaceChild(fresh, wrap);
+                    } catch (_er) { /* swallow */ }
+                }
+
+                var r = (data.result && typeof data.result === 'object') ? data.result : {};
+                var s = (typeof data.saved === 'number' ? data.saved : (typeof r.saved === 'number' ? r.saved : changedCount));
+                var c = (typeof data.cleared === 'number' ? data.cleared : (typeof r.cleared === 'number' ? r.cleared : clearedCount));
+                var k = (typeof data.skipped === 'number' ? data.skipped : (Array.isArray(r.skipped) ? r.skipped.length : (typeof r.skipped === 'number' ? r.skipped : 0)));
                 setStatus('✅ Saved ' + s + ' field' + (s === 1 ? '' : 's') + (c ? ' · ' + c + ' cleared' : '') + (k ? ' · ' + k + ' unchanged (masked passwords skipped)' : '') + ' — encryption confirmed.', false);
                 setBusy(false);
-                window.setTimeout(function() { setStatus('', false); }, 6500);
+                window.setTimeout(function() { setStatus('', false); }, 7500);
             } catch (err) {
                 setBusy(false);
                 setStatus('❌ Save failed: ' + (err && err.message ? String(err.message) : 'Unknown error'), true);

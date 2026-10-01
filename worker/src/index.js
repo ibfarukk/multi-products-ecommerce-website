@@ -1929,11 +1929,18 @@ async function handleSystemConfigSave(request, env) {
                 value: f.value, envSet: f.envSet, storedSet: f.storedSet, source: f.source
             });
         });
+        const orderedGroups = SYSTEM_CONFIG_SCHEMA.map(function(s) { return s.group; }).filter(function(v,i,a){return a.indexOf(v)===i;});
+        const r = saved.result;
         return jsonResponse({
             success: true,
-            result: saved.result,
+            order: orderedGroups,
             groups: grouped,
-            message: 'System configuration saved. ' + saved.result.saved + ' updated, ' + saved.result.cleared + ' cleared, ' + saved.result.skipped.length + ' unchanged.'
+            saved: (typeof r.saved === 'number') ? r.saved : 0,
+            cleared: (typeof r.cleared === 'number') ? r.cleared : 0,
+            skipped: (Array.isArray(r.skipped) ? r.skipped.length : (typeof r.skipped === 'number' ? r.skipped : 0)),
+            errors: (typeof r.errors === 'number') ? r.errors : 0,
+            result: r,
+            message: 'System configuration saved. ' + ((typeof r.saved === 'number') ? r.saved : 0) + ' updated, ' + ((typeof r.cleared === 'number') ? r.cleared : 0) + ' cleared, ' + (Array.isArray(r.skipped) ? r.skipped.length : 0) + ' unchanged.'
         });
     } catch (e) {
         return jsonResponse({ success: false, error: (e && e.message) ? e.message : 'Save failed.' }, 500);
