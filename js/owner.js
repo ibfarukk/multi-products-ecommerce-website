@@ -2081,6 +2081,105 @@
         'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
     ];
 
+    function renderPaymentWebhookCards() {
+        var wrap = document.createElement('div');
+        wrap.className = 'owner-webhook-cards';
+        wrap.style.cssText = 'margin-top: 28px; display: grid; gap: 14px;';
+
+        var origin = window.location.protocol + '//' + window.location.host;
+        var hooks = [
+            {
+                title: 'Paystack Webhook URL',
+                subtitle: 'Paste this into Paystack Dashboard → Settings → API Keys & Webhooks',
+                icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>',
+                gradient: 'linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%)',
+                path: '/api/paystack/webhook'
+            },
+            {
+                title: 'Flutterwave Webhook URL',
+                subtitle: 'Paste this into Flutterwave Dashboard → Settings → Webhooks',
+                icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h9"/><path d="M7 8h8M7 12h5M22 14l-4 4-2-2"/><polyline points="18 18 20 20 22 18"/></svg>',
+                gradient: 'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)',
+                path: '/api/flutterwave/webhook'
+            }
+        ];
+
+        hooks.forEach(function(h) {
+            var card = document.createElement('div');
+            card.style.cssText = 'border: 1px solid var(--border, #e5e7eb); border-radius: 16px; padding: 18px; background: #fff; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);';
+
+            var head = document.createElement('div');
+            head.style.cssText = 'display: flex; align-items: center; gap: 12px; margin-bottom: 12px;';
+
+            var iconCircle = document.createElement('div');
+            iconCircle.style.cssText = 'flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; background: ' + h.gradient + ';';
+            iconCircle.innerHTML = h.icon;
+
+            var headText = document.createElement('div');
+            headText.style.cssText = 'min-width: 0;';
+
+            var title = document.createElement('div');
+            title.style.cssText = 'font-weight: 800; font-size: 0.95rem; color: var(--heading, #0f172a);';
+            title.textContent = h.title;
+
+            var sub = document.createElement('div');
+            sub.style.cssText = 'font-size: 0.8rem; color: var(--muted, #6b7280); margin-top: 3px;';
+            sub.textContent = h.subtitle;
+
+            headText.appendChild(title);
+            headText.appendChild(sub);
+            head.appendChild(iconCircle);
+            head.appendChild(headText);
+            card.appendChild(head);
+
+            var url = origin + h.path;
+
+            var row = document.createElement('div');
+            row.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.value = url;
+            input.readOnly = true;
+            input.dataset.webhookUrl = '1';
+            input.addEventListener('click', function() { input.select(); });
+            input.style.cssText = 'flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; padding: 11px 13px; border: 1px solid var(--border, #e5e7eb); border-radius: 12px; background: #f8fafc; color: #0f172a;';
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = 'Copy URL';
+            btn.className = 'btn btn-primary';
+            btn.dataset.copyWebhook = '1';
+            btn.addEventListener('click', async function() {
+                var previousText = btn.textContent;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(url);
+                    } else if (input.select) {
+                        input.select();
+                        document.execCommand('copy');
+                    }
+                    btn.textContent = 'Copied ✓';
+                    btn.style.background = 'linear-gradient(135deg, #059669 0%, #10B981 100%)';
+                    setTimeout(function() {
+                        btn.textContent = previousText;
+                        btn.style.background = '';
+                    }, 2000);
+                } catch (_c) {
+                    btn.textContent = 'Could not copy';
+                    setTimeout(function() { btn.textContent = previousText; }, 1800);
+                }
+            });
+
+            row.appendChild(input);
+            row.appendChild(btn);
+            card.appendChild(row);
+            wrap.appendChild(card);
+        });
+
+        return wrap;
+    }
+
     var configSectionByMode = {
         singleproduct: [
             'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
@@ -2321,6 +2420,9 @@
             var body = document.createElement('div');
             body.className = 'owner-config-section-body';
             body.appendChild(renderNode(configValues[key], key, ''));
+            if (key === 'PAYMENT') {
+                try { body.appendChild(renderPaymentWebhookCards()); } catch (_e) {}
+            }
 
             // Footer with per-section Save, Reload, status
             var footer = document.createElement('div');

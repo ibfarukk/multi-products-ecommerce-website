@@ -119,15 +119,15 @@
                         <div class="form-group" id="checkout-payment-method-group">
                             <label>Payment Method</label>
                             <div id="checkout-payment-methods-container" style="display:flex;gap:12px;flex-wrap:wrap;">
-                                <label style="display:flex;gap:8px;align-items:center;">
-                                    <input type="radio" name="payment_method" value="paystack" checked>
+                                <label data-payment-opt="paystack" style="display:flex;gap:8px;align-items:center;">
+                                    <input type="radio" name="payment_method" value="paystack">
                                     <span>Paystack</span>
                                 </label>
-                                <label data-payment-opt="flutterwave" style="display:none;gap:8px;align-items:center;">
+                                <label data-payment-opt="flutterwave" style="display:flex;gap:8px;align-items:center;">
                                     <input type="radio" name="payment_method" value="flutterwave">
                                     <span>Flutterwave</span>
                                 </label>
-                                <label style="display:flex;gap:8px;align-items:center;">
+                                <label data-payment="manual" style="display:flex;gap:8px;align-items:center;">
                                     <input type="radio" name="payment_method" value="manual">
                                     <span>Manual Transfer</span>
                                 </label>

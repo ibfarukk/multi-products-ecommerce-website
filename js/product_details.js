@@ -338,12 +338,20 @@
             if (cta) {
                 cta.textContent = buttonText;
                 cta.href = link || '#';
+                // Always open vendor link in a NEW TAB so the customer keeps our store open
+                cta.target = '_blank';
+                cta.rel = 'noopener noreferrer';
                 cta.style.pointerEvents = link ? 'auto' : 'none';
                 cta.style.opacity = link ? '1' : '0.5';
                 var pid = String(product.id || '');
                 var affUrl = link;
-                cta.addEventListener('click', function() {
+                cta.addEventListener('click', function(e) {
+                    // Track click FIRST — keep POST alive via keepalive
                     trackAffiliateClick(pid, affUrl);
+                    // Fallback: if link is blank, prevent default (nothing to open)
+                    if (!affUrl) {
+                        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+                    }
                 });
             }
             if (priceEl) {
