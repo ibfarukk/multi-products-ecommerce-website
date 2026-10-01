@@ -77,8 +77,34 @@
         FOOTER_LINKS: 'Footer links', SEO: 'SEO', ANALYTICS: 'Analytics', SALES_POPUP: 'Sales popup', PROMOTION: 'Promotion',
         SOCIAL_PROOF_GALLERY: 'Social proof gallery', COMPANY: 'Company', TRUST_BADGES: 'Trust badges', CONTACT: 'Contact',
         ABOUT_PRODUCT: 'About product', HERO_TRUST: 'Hero trust items', STICKY_CTA: 'Sticky CTA', STORE_CONTENT: 'Store content',
-        PRODUCTS: 'Products', AFFILIATE_PRODUCTS: 'Affiliate products', WEBSITE_TYPE_SELECT: 'Active website mode'
+        PRODUCTS: 'Products', AFFILIATE_PRODUCTS: 'Affiliate products', WEBSITE_TYPE_SELECT: 'Active website mode',
+        SYSTEM_CONFIG: 'System configuration'
     };
+
+    var lastSystemConfig = { order: null, groups: null, fetchedAt: 0, loading: false };
+    async function fetchSystemConfig(force) {
+        if (!force && lastSystemConfig.groups && (Date.now() - lastSystemConfig.fetchedAt) < 60000) {
+            return { order: lastSystemConfig.order, groups: lastSystemConfig.groups };
+        }
+        if (lastSystemConfig.loading && !force) {
+            await new Promise(function(r){ setTimeout(r, 80); });
+            if (lastSystemConfig.groups) return { order: lastSystemConfig.order, groups: lastSystemConfig.groups };
+        }
+        lastSystemConfig.loading = true;
+        try {
+            var response = await fetch(getApiUrl('/api/owner/system/config'), {
+                headers: { 'Authorization': 'Basic ' + getAuthToken() }
+            });
+            var data = await response.json().catch(function() { return {}; });
+            if (!response.ok || !data.success) throw new Error(data.error || 'Unable to load system configuration');
+            lastSystemConfig.order = data.order || [];
+            lastSystemConfig.groups = data.groups || {};
+            lastSystemConfig.fetchedAt = Date.now();
+            return { order: lastSystemConfig.order, groups: lastSystemConfig.groups };
+        } finally {
+            lastSystemConfig.loading = false;
+        }
+    }
 
     function configTitle(key) {
         return configLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, function(letter) { return letter.toUpperCase(); });
@@ -2147,7 +2173,8 @@
         'SPECIFICATIONS', 'PACKAGES', 'FEATURES', 'ABOUT_PRODUCT', 'HERO_TRUST', 'WHY_CHOOSE', 'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
         'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
         'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
-        'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+        'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL',
+        'SYSTEM_CONFIG'
     ];
 
     function renderPaymentWebhookCards() {
@@ -2257,20 +2284,23 @@
             'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
             'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
             'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
-            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL',
+            'SYSTEM_CONFIG'
         ],
         multipleproducts: [
             'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
             'PRODUCTS', 'PACKAGES', 'FEATURES', 'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
             'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
             'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
-            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL',
+            'SYSTEM_CONFIG'
         ],
         affiliate: [
             'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
             'AFFILIATE_PRODUCTS', 'FEATURES', 'TESTIMONIALS', 'FAQ',
             'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS',
-            'SALES_POPUP', 'PROMOTION', 'TRUST_BADGES', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+            'SALES_POPUP', 'PROMOTION', 'TRUST_BADGES', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL',
+            'SYSTEM_CONFIG'
         ]
     };
 
@@ -2278,7 +2308,7 @@
         var m = String(mode || configMode || 'multipleproducts').toLowerCase();
         if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate') m = 'multipleproducts';
         var map = configSectionByMode[m] || configSectionByMode.multipleproducts;
-        if (key === 'WEBSITE_TYPE_SELECT' || key === 'API_BASE_URL') return true;
+        if (key === 'WEBSITE_TYPE_SELECT' || key === 'API_BASE_URL' || key === 'SYSTEM_CONFIG') return true;
         return map.indexOf(key) >= 0;
     }
 
@@ -2393,7 +2423,8 @@
         TRUST_BADGES: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
         STICKY_CTA: '<path d="M5 3h14v14l-5-3H7a2 2 0 0 1-2-2V3z"/><line x1="8" y1="9" x2="16" y2="9"/>',
         WEBSITE_TYPE_SELECT: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
-        API_BASE_URL: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'
+        API_BASE_URL: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+        SYSTEM_CONFIG: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><rect x="9" y="10" width="6" height="6"/><circle cx="12" cy="13" r="1.2"/><path d="M12 10V8"/>'
     };
 
     var configSectionDescriptions = {
@@ -2434,8 +2465,323 @@
         TRUST_BADGES: 'Payment badges, security seals and partner logos.',
         STICKY_CTA: 'Sticky mobile bottom bar button behavior & copy.',
         WEBSITE_TYPE_SELECT: 'Force a specific template mode directly in the config.',
-        API_BASE_URL: 'Override URL for Worker API calls. Leave blank in most cases.'
+        API_BASE_URL: 'Override URL for Worker API calls. Leave blank in most cases.',
+        SYSTEM_CONFIG: 'Server-environment credentials and system settings. LICENCE_CODE is the ONLY variable required in Cloudflare Dashboard → Variables. All other settings below are encrypted (AES-GCM) and stored in Worker KV, never exposed to the frontend in plaintext.'
     };
+
+    var _sysCfgCssInjected = false;
+    function injectSysCfgCss() {
+        if (_sysCfgCssInjected) return;
+        _sysCfgCssInjected = true;
+        var css = [
+            '.owner-syscfg-wrap{display:block;}',
+            '.owner-syscfg-banner{padding:18px 20px;border-radius:14px;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);border:1px solid #a7f3d0;margin-bottom:20px;}',
+            '.owner-syscfg-banner-title{font-weight:700;color:#065f46;margin:0 0 8px;font-size:0.98rem;display:flex;align-items:center;gap:8px;}',
+            '.owner-syscfg-banner-title svg{width:18px;height:18px;}',
+            '.owner-syscfg-banner p{margin:0 0 8px;color:#064e3b;line-height:1.6;font-size:0.9rem;}',
+            '.owner-syscfg-banner p:last-child{margin-bottom:0;}',
+            '.owner-syscfg-sources{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}',
+            '.owner-syscfg-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;}',
+            '.owner-syscfg-pill-cloudflare{background:#fef3c7;color:#92400e;border:1px solid #fde68a;}',
+            '.owner-syscfg-pill-dashboard{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;}',
+            '.owner-syscfg-pill-unset{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;}',
+            '.owner-syscfg-savebar{position:sticky;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:14px 18px;margin-top:24px;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(15,23,42,0.06);display:flex;flex-wrap:wrap;gap:10px;align-items:center;z-index:5;}',
+            '.owner-syscfg-status{flex:1;min-width:200px;font-size:0.88rem;font-weight:600;}',
+            '.owner-syscfg-status.is-ok{color:#166534;}',
+            '.owner-syscfg-status.is-error{color:#b91c1c;}',
+            '.owner-syscfg-group{margin-top:22px;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#fff;}',
+            '.owner-syscfg-group-header{padding:14px 18px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;}',
+            '.owner-syscfg-group-header h3{margin:0;font-size:1rem;color:#0f172a;font-weight:700;flex:1;}',
+            '.owner-syscfg-group-count{display:inline-flex;padding:3px 9px;border-radius:999px;background:#fff;font-size:0.75rem;font-weight:700;color:#475569;border:1px solid #e2e8f0;}',
+            '.owner-syscfg-fields{display:grid;grid-template-columns:1fr;gap:0;}',
+            '.owner-syscfg-field{padding:16px 18px;border-bottom:1px solid #f1f5f9;display:grid;grid-template-columns:minmax(220px, 1fr) minmax(260px, 2fr) auto;gap:14px 20px;align-items:start;}',
+            '.owner-syscfg-field:last-child{border-bottom:none;}',
+            '.owner-syscfg-label{min-width:0;}',
+            '.owner-syscfg-label .f-name{font-weight:700;color:#0f172a;font-size:0.92rem;display:block;margin-bottom:4px;word-break:break-word;}',
+            '.owner-syscfg-label .f-key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.74rem;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:6px;display:inline-block;margin-bottom:6px;}',
+            '.owner-syscfg-label .f-help{font-size:0.8rem;color:#64748b;line-height:1.5;margin:0;}',
+            '.owner-syscfg-input{min-width:0;}',
+            '.owner-syscfg-input input{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:0.9rem;color:#0f172a;background:#fff;transition:border-color .12s ease,box-shadow .12s ease;font-family:inherit;box-sizing:border-box;}',
+            '.owner-syscfg-input input:focus{outline:none;border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,0.15);}',
+            '.owner-syscfg-input input[readonly]{background:#f8fafc;color:#475569;cursor:not-allowed;}',
+            '.owner-syscfg-input input::placeholder{color:#94a3b8;}',
+            '.owner-syscfg-source{white-space:nowrap;padding-top:8px;}',
+            '.owner-syscfg-loading{display:flex;align-items:center;gap:12px;padding:28px 20px;color:#475569;font-weight:600;}',
+            '.owner-syscfg-spinner{width:22px;height:22px;border-radius:50%;border:2.5px solid #cbd5e1;border-top-color:#10b981;animation:syscfg-spin 0.75s linear infinite;}',
+            '@keyframes syscfg-spin{to{transform:rotate(360deg);}}',
+            '@media (max-width: 820px){',
+            '  .owner-syscfg-field{grid-template-columns:1fr;gap:6px 0;padding:14px;}',
+            '  .owner-syscfg-source{padding-top:0;}',
+            '}'
+        ].join('');
+        try {
+            var style = document.createElement('style');
+            style.setAttribute('data-owner-syscfg-css', '1');
+            style.textContent = css;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (_e) {}
+    }
+
+    function renderSystemConfigSection(order, groups) {
+        injectSysCfgCss();
+        var wrap = document.createElement('div');
+        wrap.className = 'owner-syscfg-wrap';
+
+        var banner = document.createElement('div');
+        banner.className = 'owner-syscfg-banner';
+        banner.innerHTML = [
+            '<div class="owner-syscfg-banner-title">',
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><rect x="9" y="10" width="6" height="6"/><path d="M12 10V8"/></svg>',
+            'LICENCE_CODE is the ONLY Cloudflare Variable required',
+            '</div>',
+            '<p>All other system settings (owner login, Paystack / Flutterwave secrets, Cloudflare R2 credentials, SMTP / Resend email keys) are stored <strong>encrypted</strong> in your Worker KV namespace using AES‑GCM with a key derived from your licence code. Raw secrets are <strong>never</strong> returned to this dashboard — only a masked preview with the last 4 characters is shown.</p>',
+            '<p>To change a secret (password, API key, etc.), simply type the new value into the field and press Save. Leave the masked value untouched to keep the existing secret unchanged. Values that are set as Cloudflare Variables in the Cloudflare Dashboard take priority and cannot be edited here.</p>',
+            '<div class="owner-syscfg-sources">',
+            '<span class="owner-syscfg-pill owner-syscfg-pill-cloudflare">🔒&nbsp;Cloudflare Variable (takes priority · readonly)</span>',
+            '<span class="owner-syscfg-pill owner-syscfg-pill-dashboard">⚙️&nbsp;Owner Dashboard (editable)</span>',
+            '<span class="owner-syscfg-pill owner-syscfg-pill-unset">🟢&nbsp;Unset</span>',
+            '</div>'
+        ].join('');
+        wrap.appendChild(banner);
+
+        var groupsOrdered = Array.isArray(order) && order.length ? order.slice() : Object.keys(groups || {});
+        var fieldCount = 0;
+        groupsOrdered.forEach(function(gn){ var arr = (groups && groups[gn]) || []; fieldCount += arr.length; });
+
+        var totalCountPill = document.createElement('div');
+        totalCountPill.style.cssText = 'margin-bottom:10px;color:#475569;font-size:0.82rem;font-weight:600;';
+        totalCountPill.textContent = groupsOrdered.length + ' groups · ' + fieldCount + ' fields';
+        wrap.appendChild(totalCountPill);
+
+        var inputsByKey = {};
+        var fieldNodesByKey = {};
+
+        groupsOrdered.forEach(function(groupName) {
+            var fields = (groups && groups[groupName]) || [];
+            if (!fields.length) return;
+            var gWrap = document.createElement('div');
+            gWrap.className = 'owner-syscfg-group';
+
+            var gHead = document.createElement('div');
+            gHead.className = 'owner-syscfg-group-header';
+            var gH3 = document.createElement('h3');
+            gH3.textContent = groupName;
+            var gCount = document.createElement('span');
+            gCount.className = 'owner-syscfg-group-count';
+            gCount.textContent = fields.length + ' fields';
+            gHead.appendChild(gH3);
+            gHead.appendChild(gCount);
+            gWrap.appendChild(gHead);
+
+            var fGrid = document.createElement('div');
+            fGrid.className = 'owner-syscfg-fields';
+
+            fields.forEach(function(f) {
+                var key = String(f.key || '');
+                if (!key) return;
+                var row = document.createElement('div');
+                row.className = 'owner-syscfg-field';
+                row.dataset.syscfgKey = key;
+
+                var labelCell = document.createElement('div');
+                labelCell.className = 'owner-syscfg-label';
+                var nameEl = document.createElement('span');
+                nameEl.className = 'f-name';
+                nameEl.textContent = f.label || key;
+                var keyEl = document.createElement('span');
+                keyEl.className = 'f-key';
+                keyEl.textContent = key;
+                var helpEl = document.createElement('p');
+                helpEl.className = 'f-help';
+                helpEl.textContent = f.help || (f.envSet ? 'This value is currently provided by the Cloudflare environment and takes precedence over any value stored in KV.' : (f.type === 'password' ? 'Enter the new secret value to update the stored key. Leave the masked preview unchanged to keep the existing value.' : 'Enter the value to be stored encrypted in Worker KV.'));
+                labelCell.appendChild(nameEl);
+                labelCell.appendChild(keyEl);
+                labelCell.appendChild(helpEl);
+
+                var inputCell = document.createElement('div');
+                inputCell.className = 'owner-syscfg-input';
+                var input = document.createElement('input');
+                input.type = (f.type === 'password' || f.type === 'secret' || f.sensitive) ? 'password' : 'text';
+                input.name = 'syscfg_' + key;
+                input.setAttribute('data-syscfg-input-key', key);
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('spellcheck', 'false');
+                input.setAttribute('data-initial', f.value && typeof f.value === 'string' ? f.value : '');
+                input.value = (f.value && typeof f.value === 'string') ? f.value : '';
+                if (f.placeholder) input.placeholder = f.placeholder;
+                if (f.inputType && f.inputType === 'number') input.type = 'number';
+                if (f.envSet) {
+                    input.setAttribute('readonly', 'readonly');
+                }
+                input.addEventListener('focus', function() { try { if (input.type === 'password' && !f.envSet) input.select(); } catch(_e){} });
+                inputsByKey[key] = input;
+                inputCell.appendChild(input);
+
+                var srcCell = document.createElement('div');
+                srcCell.className = 'owner-syscfg-source';
+                var pill = document.createElement('span');
+                pill.className = 'owner-syscfg-pill ' + (f.envSet ? 'owner-syscfg-pill-cloudflare' : (f.source === 'Owner Dashboard' ? 'owner-syscfg-pill-dashboard' : 'owner-syscfg-pill-unset'));
+                if (f.envSet) {
+                    pill.innerHTML = '🔒&nbsp;Cloudflare Variable · readonly';
+                    input.title = 'This value is set as a Cloudflare environment variable and takes priority. To change it, edit Cloudflare Dashboard → Variables.';
+                } else if (f.source === 'Owner Dashboard') {
+                    pill.innerHTML = '⚙️&nbsp;Owner Dashboard · saved';
+                } else {
+                    pill.innerHTML = '🟢&nbsp;Unset';
+                }
+                srcCell.appendChild(pill);
+
+                row.appendChild(labelCell);
+                row.appendChild(inputCell);
+                row.appendChild(srcCell);
+                fGrid.appendChild(row);
+                fieldNodesByKey[key] = { row: row, input: input, pill: pill, srcCell: srcCell, labelCell: labelCell, def: f };
+            });
+            gWrap.appendChild(fGrid);
+            wrap.appendChild(gWrap);
+        });
+
+        var savebar = document.createElement('div');
+        savebar.className = 'owner-syscfg-savebar';
+
+        var status = document.createElement('div');
+        status.className = 'owner-syscfg-status';
+        status.textContent = '';
+        status.setAttribute('aria-live', 'polite');
+
+        var reloadBtn = document.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'btn btn-secondary';
+        reloadBtn.innerHTML = '↻&nbsp;&nbsp;Reload';
+        reloadBtn.setAttribute('aria-label', 'Reload system configuration');
+
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.innerHTML = '💾&nbsp;&nbsp;Save System Configuration';
+        saveBtn.setAttribute('aria-label', 'Save system configuration');
+
+        savebar.appendChild(saveBtn);
+        savebar.appendChild(reloadBtn);
+        savebar.appendChild(status);
+        wrap.appendChild(savebar);
+
+        function setStatus(msg, isErr) {
+            status.textContent = msg || '';
+            status.classList.remove('is-ok', 'is-error');
+            if (msg && isErr) status.classList.add('is-error');
+            else if (msg) status.classList.add('is-ok');
+        }
+
+        function setBusy(busy, btnLabel) {
+            saveBtn.disabled = !!busy;
+            reloadBtn.disabled = !!busy;
+            if (busy) {
+                saveBtn.innerHTML = '⏳&nbsp;&nbsp;' + (btnLabel || 'Saving…');
+                saveBtn.style.opacity = '0.75';
+            } else {
+                saveBtn.innerHTML = '💾&nbsp;&nbsp;Save System Configuration';
+                saveBtn.style.opacity = '';
+            }
+        }
+
+        reloadBtn.addEventListener('click', function() {
+            setBusy(true, 'Reloading…');
+            setStatus('Reloading latest values…', false);
+            fetchSystemConfig(true).then(function(res) {
+                try {
+                    var fresh = renderSystemConfigSection(res.order, res.groups);
+                    wrap.parentNode.replaceChild(fresh, wrap);
+                } catch (er) {
+                    setStatus('Reload failed: ' + (er && er.message ? er.message : 'Unknown error'), true);
+                }
+            }).catch(function(err) {
+                setBusy(false);
+                setStatus('Reload failed: ' + (err && err.message ? err.message : 'Unknown error'), true);
+            });
+        });
+
+        saveBtn.addEventListener('click', async function() {
+            setBusy(true, 'Saving…');
+            setStatus('Preparing save…', false);
+            try {
+                var patch = {};
+                var changedCount = 0;
+                Object.keys(inputsByKey).forEach(function(key) {
+                    var inp = inputsByKey[key];
+                    var info = fieldNodesByKey[key];
+                    if (!info || !inp) return;
+                    if (info.def.envSet) return;
+                    var val = inp.value;
+                    if (val === null || val === undefined) val = '';
+                    else val = String(val);
+                    var initial = inp.getAttribute('data-initial') || '';
+                    if (val === initial) return;
+                    if (info.def.type === 'password' && /^[•●\*_]{8,}/.test(val) && /[A-Za-z0-9]{4}$/.test(val)) return;
+                    patch[key] = val;
+                    changedCount++;
+                });
+
+                var clearedCount = 0;
+                Object.keys(patch).forEach(function(k) { if (String(patch[k]).trim() === '') clearedCount++; });
+
+                if (!changedCount) {
+                    setBusy(false);
+                    setStatus('No changes detected. Update any field to save.', true);
+                    return;
+                }
+
+                setStatus('Saving ' + changedCount + ' field' + (changedCount === 1 ? '' : 's') + '…', false);
+
+                var response = await fetch(getApiUrl('/api/owner/system/config'), {
+                    method: 'PUT',
+                    headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patch: patch })
+                });
+                var data = await response.json().catch(function() { return {}; });
+                if (!response.ok) throw new Error(data.error || 'Unable to save system configuration (HTTP ' + response.status + ')');
+                if (!data.success) throw new Error(data.error || 'Unable to save system configuration');
+
+                lastSystemConfig.groups = data.groups || {};
+                lastSystemConfig.order = data.order || [];
+                lastSystemConfig.fetchedAt = Date.now();
+
+                if (data.groups && Object.keys(data.groups).length) {
+                    var latestGroups = data.groups;
+                    var latestOrder = data.order || Object.keys(latestGroups);
+                    latestOrder.forEach(function(gn) {
+                        (latestGroups[gn] || []).forEach(function(f) {
+                            var key = String(f.key || '');
+                            var nodeInfo = fieldNodesByKey[key];
+                            if (!nodeInfo) return;
+                            var inp = nodeInfo.input;
+                            var pill = nodeInfo.pill;
+                            inp.value = (f.value && typeof f.value === 'string') ? f.value : '';
+                            inp.setAttribute('data-initial', inp.value);
+                            if (f.envSet) inp.setAttribute('readonly', 'readonly');
+                            else inp.removeAttribute('readonly');
+                            pill.className = 'owner-syscfg-pill ' + (f.envSet ? 'owner-syscfg-pill-cloudflare' : (f.source === 'Owner Dashboard' ? 'owner-syscfg-pill-dashboard' : 'owner-syscfg-pill-unset'));
+                            if (f.envSet) pill.innerHTML = '🔒&nbsp;Cloudflare Variable · readonly';
+                            else if (f.source === 'Owner Dashboard') pill.innerHTML = '⚙️&nbsp;Owner Dashboard · saved';
+                            else pill.innerHTML = '🟢&nbsp;Unset';
+                        });
+                    });
+                }
+
+                var s = (typeof data.saved === 'number' ? data.saved : changedCount);
+                var c = (typeof data.cleared === 'number' ? data.cleared : clearedCount);
+                var k = (typeof data.skipped === 'number' ? data.skipped : 0);
+                setStatus('✅ Saved ' + s + ' field' + (s === 1 ? '' : 's') + (c ? ' · ' + c + ' cleared' : '') + (k ? ' · ' + k + ' unchanged (masked passwords skipped)' : '') + ' — encryption confirmed.', false);
+                setBusy(false);
+                window.setTimeout(function() { setStatus('', false); }, 6500);
+            } catch (err) {
+                setBusy(false);
+                setStatus('❌ Save failed: ' + (err && err.message ? String(err.message) : 'Unknown error'), true);
+            }
+        });
+
+        return wrap;
+    }
 
     function setSectionStatus(key, message, isError) {
         var el = document.getElementById('owner-config-section-status-' + key);
@@ -2453,7 +2799,9 @@
         container.innerHTML = '';
         if (sublist) sublist.innerHTML = '';
 
-        var keys = Object.keys(configValues || {}).filter(function(key) {
+        var sectionKeys = Object.keys(configValues || {});
+        if (sectionKeys.indexOf('SYSTEM_CONFIG') < 0) sectionKeys.push('SYSTEM_CONFIG');
+        var keys = sectionKeys.filter(function(key) {
             return isConfigSectionVisibleForMode(key, configMode);
         }).sort(function(a, b) {
             return configSectionOrderIndex(a) - configSectionOrderIndex(b) || String(a).localeCompare(String(b));
@@ -2488,45 +2836,64 @@
 
             var body = document.createElement('div');
             body.className = 'owner-config-section-body';
-            body.appendChild(renderNode(configValues[key], key, ''));
+            if (key === 'SYSTEM_CONFIG') {
+                var sysPlaceholder = document.createElement('div');
+                sysPlaceholder.className = 'owner-syscfg-placeholder';
+                sysPlaceholder.innerHTML = '<div class="owner-syscfg-loading"><div class="owner-syscfg-spinner"></div><span>Loading system configuration…</span></div>';
+                body.appendChild(sysPlaceholder);
+                fetchSystemConfig(false).then(function(result) {
+                    try {
+                        var node = renderSystemConfigSection(result.order, result.groups);
+                        body.innerHTML = '';
+                        body.appendChild(node);
+                    } catch (err) {
+                        body.innerHTML = '<div class="owner-config-section-status is-error" style="padding:16px;border-radius:8px;">Failed to load system configuration: ' + (err && err.message ? String(err.message) : 'Unknown error') + '</div>';
+                    }
+                }).catch(function(err) {
+                    body.innerHTML = '<div class="owner-config-section-status is-error" style="padding:16px;border-radius:8px;">Failed to load system configuration: ' + (err && err.message ? String(err.message) : 'Unknown error') + '</div>';
+                });
+            } else {
+                body.appendChild(renderNode(configValues[key], key, ''));
+            }
             if (key === 'PAYMENT') {
                 try { body.appendChild(renderPaymentWebhookCards()); } catch (_e) {}
             }
 
-            // Footer with per-section Save, Reload, status
-            var footer = document.createElement('div');
-            footer.className = 'owner-config-section-footer';
-            var status = document.createElement('div');
-            status.id = 'owner-config-section-status-' + key;
-            status.className = 'owner-config-section-status';
-            status.textContent = '';
-
-            var saveBtn = document.createElement('button');
-            saveBtn.type = 'button';
-            saveBtn.className = 'btn btn-primary';
-            saveBtn.textContent = 'Save ' + configTitle(key);
-            saveBtn.setAttribute('aria-label', 'Save ' + configTitle(key));
-            saveBtn.dataset.saveSectionKey = key;
-            saveBtn.addEventListener('click', function() { saveConfig(key); });
-
-            var reloadBtn = document.createElement('button');
-            reloadBtn.type = 'button';
-            reloadBtn.className = 'btn btn-secondary';
-            reloadBtn.textContent = 'Reload this section';
-            reloadBtn.setAttribute('aria-label', 'Reload ' + configTitle(key));
-            reloadBtn.dataset.reloadSectionKey = key;
-            reloadBtn.addEventListener('click', function() { reloadConfigSection(key); });
-
-            footer.appendChild(saveBtn);
-            footer.appendChild(reloadBtn);
-            footer.appendChild(status);
-
             section.appendChild(header);
             section.appendChild(body);
-            section.appendChild(footer);
+
+            if (key !== 'SYSTEM_CONFIG') {
+                var footer = document.createElement('div');
+                footer.className = 'owner-config-section-footer';
+                var status = document.createElement('div');
+                status.id = 'owner-config-section-status-' + key;
+                status.className = 'owner-config-section-status';
+                status.textContent = '';
+
+                var saveBtn = document.createElement('button');
+                saveBtn.type = 'button';
+                saveBtn.className = 'btn btn-primary';
+                saveBtn.textContent = 'Save ' + configTitle(key);
+                saveBtn.setAttribute('aria-label', 'Save ' + configTitle(key));
+                saveBtn.dataset.saveSectionKey = key;
+                saveBtn.addEventListener('click', function() { saveConfig(key); });
+
+                var reloadBtn = document.createElement('button');
+                reloadBtn.type = 'button';
+                reloadBtn.className = 'btn btn-secondary';
+                reloadBtn.textContent = 'Reload this section';
+                reloadBtn.setAttribute('aria-label', 'Reload ' + configTitle(key));
+                reloadBtn.dataset.reloadSectionKey = key;
+                reloadBtn.addEventListener('click', function() { reloadConfigSection(key); });
+
+                footer.appendChild(saveBtn);
+                footer.appendChild(reloadBtn);
+                footer.appendChild(status);
+                section.appendChild(footer);
+            }
+
             container.appendChild(section);
 
-            // Add sidebar sub-list entry
             if (sublist) {
                 var li = document.createElement('li');
                 var link = document.createElement('button');
@@ -2637,6 +3004,27 @@
         var intro = document.querySelector('.owner-settings-intro');
         if (intro) intro.style.display = 'none';
         highlightSidebarSection(key);
+        var sysCfgActive = key === 'SYSTEM_CONFIG';
+        var toolbarSave = document.getElementById('owner-section-save-active');
+        var toolbarReload = document.getElementById('owner-section-reload-active');
+        if (toolbarSave) {
+            if (sysCfgActive) {
+                toolbarSave.style.display = 'none';
+                toolbarSave.setAttribute('disabled', 'true');
+            } else {
+                toolbarSave.style.display = '';
+                toolbarSave.removeAttribute('disabled');
+            }
+        }
+        if (toolbarReload) {
+            if (sysCfgActive) {
+                toolbarReload.style.display = 'none';
+                toolbarReload.setAttribute('disabled', 'true');
+            } else {
+                toolbarReload.style.display = '';
+                toolbarReload.removeAttribute('disabled');
+            }
+        }
         if (typeof window.scrollTo === 'function') {
             var panel = document.getElementById('nav-panel-settings');
             window.scrollTo({ top: panel ? panel.offsetTop - 24 : 0, behavior: 'smooth' });
@@ -2660,6 +3048,15 @@
             loadConfig(configMode).then(function() { setConfigModeBanner(configMode); syncSidebarToStoreMode(configMode); });
             return;
         }
+        if (sectionKey === 'SYSTEM_CONFIG') {
+            try {
+                var sysBody = document.querySelector('#config-section-SYSTEM_CONFIG .owner-config-section-body');
+                var sysReload = sysBody ? sysBody.querySelector('.owner-syscfg-savebar .btn-secondary') : null;
+                if (sysReload && typeof sysReload.click === 'function') { sysReload.click(); return; }
+            } catch (_e) {}
+            fetchSystemConfig(true).then(function() { renderConfig(); syncSidebarToStoreMode(configMode); });
+            return;
+        }
         setSectionStatus(sectionKey, 'Reloading...', false);
         fetchConfig(configMode).then(function(latest) {
             configValues = latest;
@@ -2674,6 +3071,14 @@
     }
 
     async function saveConfig(sectionKey) {
+        if (sectionKey === 'SYSTEM_CONFIG') {
+            try {
+                var sysBody = document.querySelector('#config-section-SYSTEM_CONFIG .owner-config-section-body');
+                var sysSave = sysBody ? sysBody.querySelector('.owner-syscfg-savebar .btn-primary') : null;
+                if (sysSave && typeof sysSave.click === 'function') { sysSave.click(); return; }
+            } catch (_e) {}
+            throw new Error('Use the Save System Configuration button at the bottom of the SYSTEM CONFIG section.');
+        }
         var nextConfig = collectConfig();
         if (configMode === 'singleproduct' && !nextConfig.WEBSITE_TYPE_SELECT) nextConfig.WEBSITE_TYPE_SELECT = 'singleproduct';
         // If sectionKey provided: still send the full config, but only read status back into that section.

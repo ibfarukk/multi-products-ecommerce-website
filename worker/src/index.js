@@ -133,6 +133,267 @@ function _licJson(message) {
     });
 }
 
+// ============================================================
+// SYSTEM CONFIG — DASHBOARD-EDITABLE SECRETS
+// ============================================================
+// The ONLY env variable the deployer must set in Cloudflare
+// dashboard is LICENCE_CODE. All other secrets (owner login,
+// Paystack/Flutterwave keys, R2 credentials, SMTP/email etc.)
+// are optionally stored ENCRYPTED in OWNER_STATS KV namespace
+// under the prefix "system-config:".
+//
+// The licence code is used as the passphrase to derive an
+// AES-GCM encryption key via PBKDF2 (120,000 iterations).
+// The plaintext never leaves the Worker runtime; the KV
+// stored payload is {"a":"<base64 iv>","c":"<base64 ciphertext>"}
+// and the front-end always receives a masked preview (never
+// the raw value even when logged-in).
+// ============================================================
+
+// Definitive schema of all secrets that can be set either as
+// Cloudflare env vars or from the Owner dashboard SYSTEM CONFIG
+// section. Group, type (password / text / number / boolean) and
+// human readable labels drive the dashboard rendering. order
+// in the array determines display order.
+const SYSTEM_CONFIG_SCHEMA = [
+    // Owner auth
+    { group: 'Owner Login', key: 'OWNER_DASHBOARD_USERNAME', label: 'Owner Username', type: 'text', placeholder: 'e.g. ownerme', help: 'Default username for owner dashboard login.' },
+    { group: 'Owner Login', key: 'OWNER_DASHBOARD_PASSWORD', label: 'Owner Password', type: 'password', placeholder: 'Use a strong password', help: 'Password for owner dashboard login.' },
+    { group: 'Owner Login', key: 'OWNER_EMAIL',                label: 'Owner Email',    type: 'text', placeholder: 'admin@example.com', help: 'Used for order notifications, password resets, and receipts.' },
+    // Paystack
+    { group: 'Paystack', key: 'PAYSTACK_SECRET_KEY',  label: 'Paystack Secret Key',  type: 'password', placeholder: 'sk_live_... or sk_test_...', help: 'Secret key for verifying Paystack transactions & webhooks.' },
+    // Flutterwave
+    { group: 'Flutterwave', key: 'FLUTTERWAVE_SECRET_KEY',   label: 'Flutterwave Secret Key',   type: 'password', placeholder: 'FLWSECK-...', help: 'Secret key for Flutterwave transaction verification.' },
+    { group: 'Flutterwave', key: 'FLUTTERWAVE_PUBLIC_KEY',   label: 'Flutterwave Public Key',   type: 'password', placeholder: 'FLWPUBK-...', help: 'Public key shown in checkout.js (stored masked, used only for env fallback).' },
+    { group: 'Flutterwave', key: 'FLUTTERWAVE_BUSINESS_ID',  label: 'Flutterwave Business ID',  type: 'text',     placeholder: '', help: 'Optional business ID for Flutterwave integrations.' },
+    { group: 'Flutterwave', key: 'FLUTTERWAVE_WEBHOOK_HASH', label: 'Flutterwave Webhook Hash', type: 'password', placeholder: '', help: 'Secret hash configured in Flutterwave webhook settings.' },
+    // Cloudflare R2 Storage
+    { group: 'Cloudflare R2', key: 'R2_BUCKET_NAME',      label: 'R2 Bucket Name',       type: 'text', placeholder: 'e.g. multi-products-ecommerce-images', help: 'Name of the R2 bucket (matches bucket_name in wrangler.jsonc bindings).' },
+    { group: 'Cloudflare R2', key: 'R2_ACCOUNT_ID',       label: 'R2 / CF Account ID',    type: 'text', placeholder: '32-char Cloudflare account id', help: 'Required for S3-compatible R2 uploads.' },
+    { group: 'Cloudflare R2', key: 'R2_ACCESS_KEY_ID',    label: 'R2 Access Key ID',      type: 'password', placeholder: '', help: 'S3-style access key id for R2 API uploads.' },
+    { group: 'Cloudflare R2', key: 'R2_SECRET_ACCESS_KEY',label: 'R2 Secret Access Key',  type: 'password', placeholder: '', help: 'S3-style secret access key for R2 API uploads.' },
+    { group: 'Cloudflare R2', key: 'R2_PUBLIC_URL',       label: 'R2 Public Bucket URL',  type: 'text', placeholder: 'https://...r2.dev', help: 'Optional public URL for R2 bucket (r2.dev or custom domain).' },
+    { group: 'Cloudflare R2', key: 'R2_CUSTOM_DOMAIN',    label: 'R2 Custom Domain',      type: 'text', placeholder: 'cdn.example.com', help: 'Optional custom domain serving R2 images.' },
+    // Email / SMTP
+    { group: 'Email & SMTP', key: 'GMAIL_SMTP_USER',    label: 'SMTP Username',  type: 'text', placeholder: 'your@email.com', help: 'Username for sending mail via Gmail / SMTP.' },
+    { group: 'Email & SMTP', key: 'GMAIL_SMTP_PASSWORD',label: 'SMTP Password',  type: 'password', placeholder: 'App password', help: 'Password / app password for SMTP.' },
+    { group: 'Email & SMTP', key: 'GMAIL_SMTP_HOST',    label: 'SMTP Host',      type: 'text', placeholder: 'smtp.gmail.com', help: 'Hostname for SMTP server (e.g. smtp.gmail.com).' },
+    { group: 'Email & SMTP', key: 'GMAIL_SMTP_PORT',    label: 'SMTP Port',      type: 'number', placeholder: '465', help: 'Port for SMTP (465 for SSL, 587 for STARTTLS).' },
+    { group: 'Email & SMTP', key: 'GMAIL_FROM_EMAIL',   label: 'SMTP From Email',type: 'text', placeholder: 'no-reply@example.com', help: 'Email address used as From when sending via SMTP.' },
+    { group: 'Email & SMTP', key: 'MAIL_FROM',          label: 'Default From',   type: 'text', placeholder: 'Your Store <no-reply@example.com>', help: 'Fallback display name + From for outgoing email.' },
+    { group: 'Email & SMTP', key: 'RESEND_FROM_EMAIL',  label: 'Resend From',    type: 'text', placeholder: '', help: 'From email for Resend API (if using Resend instead of SMTP).' },
+    { group: 'Email & SMTP', key: 'RESEND_API_KEY',     label: 'Resend API Key', type: 'password', placeholder: 're_...', help: 'Resend API key for Resend integration.' }
+];
+const SYSTEM_CONFIG_KEYS = Object.freeze(SYSTEM_CONFIG_SCHEMA.map(function(s) { return s.key; }));
+const SYSTEM_CONFIG_GROUP = Object.freeze(SYSTEM_CONFIG_SCHEMA.reduce(function(acc, s) { acc[s.key] = s.group; return acc; }, {}));
+const SYSTEM_CONFIG_TYPE  = Object.freeze(SYSTEM_CONFIG_SCHEMA.reduce(function(acc, s) { acc[s.key] = s.type;  return acc; }, {}));
+const SYSTEM_CONFIG_LABEL = Object.freeze(SYSTEM_CONFIG_SCHEMA.reduce(function(acc, s) { acc[s.key] = s.label; return acc; }, {}));
+const SYSTEM_CONFIG_HELP  = Object.freeze(SYSTEM_CONFIG_SCHEMA.reduce(function(acc, s) { acc[s.key] = s.help || ''; return acc; }, {}));
+const SYSTEM_CONFIG_PLACE = Object.freeze(SYSTEM_CONFIG_SCHEMA.reduce(function(acc, s) { acc[s.key] = s.placeholder || ''; return acc; }, {}));
+
+// ---- KV key helpers -------------------------------------------------
+const SYSCFG_KV_PREFIX = 'system-config:';
+function syscfgKvKey(key) { return SYSCFG_KV_PREFIX + String(key); }
+function b64enc(u8) {
+    let s = '';
+    for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return btoa(s);
+}
+function b64dec(s) {
+    const b = atob(String(s || ''));
+    const out = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+    return out;
+}
+function te(s) { return new TextEncoder().encode(String(s == null ? '' : s)); }
+function td(b) { return new TextDecoder('utf-8').decode(b); }
+
+// ---- PBKDF2 key derivation from LICENCE_CODE --------------------
+// Returns a CryptoKey (AES-GCM, extractable=false, encrypt+decrypt)
+// derived from env.LICENCE_CODE using a static salt (the PMELAB
+// namespace) + 120,000 SHA-256 iterations.
+let _cachedSysCfgKey = null;
+let _cachedSysCfgSeed = null;
+async function syscfgMasterKey(env) {
+    const pass = String((env && typeof env.LICENCE_CODE !== 'undefined') ? env.LICENCE_CODE : '');
+    const seedKey = 'pmelab-syscfg-key|' + pass;
+    if (_cachedSysCfgKey && _cachedSysCfgSeed === seedKey) return _cachedSysCfgKey;
+    const passKey = await crypto.subtle.importKey(
+        'raw',
+        te(pass || 'invalid-empty-licence-passphrase'),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey']
+    );
+    const salt = te('pmelab:syscfg:v1:salt:2026');
+    const iter = 120000;
+    const dk = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' },
+        passKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+    _cachedSysCfgKey = dk;
+    _cachedSysCfgSeed = seedKey;
+    return dk;
+}
+
+// ---- Encrypt a value for KV storage --------------------------------
+async function syscfgEncrypt(env, value) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await syscfgMasterKey(env);
+    const ctBuf = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        te(typeof value === 'string' ? value : (value == null ? '' : JSON.stringify(value)))
+    );
+    const payload = { v: 1, a: b64enc(iv), c: b64enc(new Uint8Array(ctBuf)) };
+    return JSON.stringify(payload);
+}
+
+// ---- Decrypt a value from KV storage --------------------------------
+async function syscfgDecrypt(env, stored) {
+    if (stored == null || stored === '') return null;
+    try {
+        const payload = (typeof stored === 'string') ? JSON.parse(stored) : stored;
+        if (!payload || typeof payload !== 'object') return null;
+        const key = await syscfgMasterKey(env);
+        const ptBuf = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: b64dec(payload.a) },
+            key,
+            b64dec(payload.c)
+        );
+        return td(new Uint8Array(ptBuf));
+    } catch (_e) {
+        return null;
+    }
+}
+
+// ---- High-level read/write through OWNER_STATS KV ------------------
+async function syscfgReadRaw(env, key) {
+    if (!env || !env.OWNER_STATS) return null;
+    if (SYSTEM_CONFIG_KEYS.indexOf(key) === -1) return null;
+    const k = syscfgKvKey(key);
+    try {
+        return await env.OWNER_STATS.get(k, 'text');
+    } catch (_e) { return null; }
+}
+async function syscfgWriteRaw(env, key, encryptedBlob) {
+    if (!env || !env.OWNER_STATS) return false;
+    if (SYSTEM_CONFIG_KEYS.indexOf(key) === -1) return false;
+    const k = syscfgKvKey(key);
+    try {
+        await env.OWNER_STATS.put(k, encryptedBlob);
+        return true;
+    } catch (_e) { return false; }
+}
+async function syscfgDelete(env, key) {
+    if (!env || !env.OWNER_STATS) return false;
+    if (SYSTEM_CONFIG_KEYS.indexOf(key) === -1) return false;
+    try {
+        await env.OWNER_STATS.delete(syscfgKvKey(key));
+        return true;
+    } catch (_e) { return false; }
+}
+
+// Resolve a secret: env first, then system-config encrypted KV
+// Falls back to empty string / null if neither is set.
+//
+// IMPORTANT: This is the single function the rest of the Worker
+// uses instead of raw env.X access. The owner never needs to set
+// X in Cloudflare dashboard because KV acts as the override store.
+async function resolveSecret(env, key) {
+    if (!key) return '';
+    if (env && typeof env[key] !== 'undefined' && String(env[key] || '').length > 0) {
+        return String(env[key]);
+    }
+    const blob = await syscfgReadRaw(env, key);
+    if (!blob) return '';
+    const v = await syscfgDecrypt(env, blob);
+    return (v == null ? '' : String(v));
+}
+
+// Masked preview for dashboard (never returns raw)
+function syscfgMasked(rawValue, type) {
+    const s = String(rawValue == null ? '' : rawValue);
+    if (!s) return '';
+    if (type === 'password' || type === 'secret') {
+        if (s.length <= 4) return '•'.repeat(s.length);
+        return '•'.repeat(Math.max(8, s.length - 4)) + s.slice(-4);
+    }
+    return s;
+}
+
+// Build the schema + masked previews returned to the owner dashboard
+// for SYSTEM CONFIG section rendering.
+async function syscfgGetSchemaWithMaskedValues(env) {
+    const out = [];
+    const order = {};
+    SYSTEM_CONFIG_SCHEMA.forEach(function(item, i) { order[item.group] = order[item.group] || []; order[item.group].push(i); });
+    for (let i = 0; i < SYSTEM_CONFIG_SCHEMA.length; i++) {
+        const item = SYSTEM_CONFIG_SCHEMA[i];
+        const envVal = (env && typeof env[item.key] !== 'undefined') ? String(env[item.key] || '') : '';
+        let storedVal = '';
+        try { storedVal = (await syscfgDecrypt(env, await syscfgReadRaw(env, item.key))) || ''; } catch (_e) { storedVal = ''; }
+        const effective = envVal || storedVal || '';
+        out.push({
+            key: item.key,
+            group: item.group,
+            label: item.label,
+            type: item.type,
+            placeholder: item.placeholder,
+            help: item.help,
+            value: syscfgMasked(effective, item.type),
+            envSet: !!envVal,
+            storedSet: !!storedVal,
+            source: envVal ? 'Cloudflare Variable' : (storedVal ? 'Owner Dashboard' : 'Unset')
+        });
+    }
+    return out;
+}
+
+// Save updates coming from the owner dashboard.
+// Rules:
+//   - Empty string '' for password-type means "keep existing or clear if storedSet"
+//   - We detect a password-type unchanged when its string starts with 8+ '•' dots.
+async function syscfgBulkUpdate(env, patchObj) {
+    if (!patchObj || typeof patchObj !== 'object') return { ok: false, error: 'Invalid payload.' };
+    const result = { saved: 0, skipped: [], cleared: 0, errors: 0 };
+    for (let i = 0; i < SYSTEM_CONFIG_SCHEMA.length; i++) {
+        const item = SYSTEM_CONFIG_SCHEMA[i];
+        const key = item.key;
+        if (!(key in patchObj)) { result.skipped.push(key); continue; }
+        let incoming = (patchObj[key] == null) ? '' : String(patchObj[key]);
+        try {
+            // Password-type unchanged if it's just all bullets / starts with 8+ dots
+            if (item.type === 'password') {
+                const isMaskedReSubmit = /^••••••••+/.test(incoming);
+                if (isMaskedReSubmit) {
+                    result.skipped.push(key + ':unchanged-masked');
+                    continue;
+                }
+                if (incoming === '') {
+                    await syscfgDelete(env, key);
+                    result.cleared++;
+                    continue;
+                }
+            } else {
+                // Text/number/bool — clearing via empty string for non-passwords also clears KV
+                if (incoming === '') {
+                    await syscfgDelete(env, key);
+                    result.cleared++;
+                    continue;
+                }
+            }
+            const blob = await syscfgEncrypt(env, incoming);
+            const ok = await syscfgWriteRaw(env, key, blob);
+            if (ok) result.saved++; else result.errors++;
+        } catch (_e) { result.errors++; }
+    }
+    return { ok: true, result: result };
+}
+
 export default {
     async fetch(request, env, ctx) {
         try {
@@ -259,6 +520,14 @@ export default {
             return handleOwnerConfigSave(request, env);
         }
 
+        // SYSTEM CONFIG — Owner dashboard editable secrets (env vars via KV)
+        if (path === '/api/owner/system/config' && request.method === 'GET') {
+            return handleSystemConfigGet(request, env);
+        }
+        if (path === '/api/owner/system/config' && request.method === 'PUT') {
+            return handleSystemConfigSave(request, env);
+        }
+
         // Owner site_selector.js editor
         if (path === '/api/owner/site-selector' && request.method === 'GET') {
             return handleOwnerSiteSelector(request, env);
@@ -293,7 +562,7 @@ export default {
         }
 
         if (path === '/api/health' && request.method === 'GET') {
-            return handleHealthCheck(env);
+            return handleHealthCheck(request, env);
         }
 
         if (path.startsWith('/api/')) {
@@ -449,7 +718,7 @@ export default {
 // PAYSTACK WEBHOOK HANDLER
 // =========================================================
 async function handlePaystackWebhook(request, env) {
-    const secret = env.PAYSTACK_SECRET_KEY;
+    const secret = String(await resolveSecret(env, 'PAYSTACK_SECRET_KEY') || '');
     if (!secret) {
         return jsonResponse({ error: 'Payment not configured' }, 500);
     }
@@ -649,8 +918,8 @@ function flutterwaveAmountToUnit(amount) {
 // FLUTTERWAVE WEBHOOK HANDLER
 // =========================================================
 async function handleFlutterwaveWebhook(request, env) {
-    const secret = env.FLUTTERWAVE_SECRET_KEY;
-    const webhookHash = env.FLUTTERWAVE_WEBHOOK_HASH || '';
+    const secret = String(await resolveSecret(env, 'FLUTTERWAVE_SECRET_KEY') || '');
+    const webhookHash = String(await resolveSecret(env, 'FLUTTERWAVE_WEBHOOK_HASH') || '');
     if (!secret) {
         return jsonResponse({ error: 'Payment not configured' }, 500);
     }
@@ -816,7 +1085,7 @@ async function handleVerifyPayment(request, env) {
         const reference = String(provider === 'flutterwave' ? (raw.tx_ref || raw.transaction_id || raw.reference || '') : (raw.reference || '')).trim();
 
         if (provider === 'flutterwave') {
-            const secret = env.FLUTTERWAVE_SECRET_KEY;
+            const secret = String(await resolveSecret(env, 'FLUTTERWAVE_SECRET_KEY') || '');
             if (!secret) {
                 return jsonResponse({ success: false, error: 'Payment not configured. Missing FLUTTERWAVE_SECRET_KEY.', retryable: false, provider: 'flutterwave' }, 503);
             }
@@ -983,7 +1252,7 @@ async function handleVerifyPayment(request, env) {
         }
 
         // === Existing Paystack verification path ===
-        const secret = env.PAYSTACK_SECRET_KEY;
+        const secret = String(await resolveSecret(env, 'PAYSTACK_SECRET_KEY') || '');
         if (!secret) {
             return jsonResponse({ success: false, error: 'Payment not configured. Missing PAYSTACK_SECRET_KEY.', retryable: false }, 503);
         }
@@ -1398,7 +1667,7 @@ async function handleManualOrder(request, env) {
 }
 
 async function handleRefundRequest(request, env) {
-    const ownerEmail = String(env.OWNER_EMAIL || '').trim();
+    const ownerEmail = String(await resolveSecret(env, 'OWNER_EMAIL') || '').trim();
     if (!ownerEmail) {
         return jsonResponse({ success: false, error: 'Owner email not configured' }, 503);
     }
@@ -1419,7 +1688,7 @@ async function handleRefundRequest(request, env) {
     }
 
     const context = await getEmailContext(env);
-    const fromEmail = getFromEmail(env);
+    const fromEmail = await getFromEmail(env);
     const preheader = 'Refund request from ' + name + ' (' + reference + ')';
     const rows = [
         { label: 'Name', value: name },
@@ -1583,7 +1852,7 @@ async function handleOwnerStats(request, env) {
         return jsonResponse({ success: false, error: 'Stats storage not configured' }, 503);
     }
 
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) {
         return new Response(JSON.stringify({
             success: false,
@@ -1606,7 +1875,7 @@ async function handleOwnerStats(request, env) {
 }
 
 async function handleOwnerConfig(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
 
     const mode = normalizeSiteMode(new URL(request.url).searchParams.get('mode'));
@@ -1615,8 +1884,64 @@ async function handleOwnerConfig(request, env) {
     return jsonResponse({ success: true, mode: mode, config: config });
 }
 
+async function handleSystemConfigGet(request, env) {
+    const authorized = await isOwnerAuthorizedAsync(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    try {
+        const fields = await syscfgGetSchemaWithMaskedValues(env);
+        const grouped = {};
+        fields.forEach(function(f) {
+            grouped[f.group] = grouped[f.group] || [];
+            grouped[f.group].push({
+                key: f.key, label: f.label, type: f.type,
+                placeholder: f.placeholder, help: f.help,
+                value: f.value, envSet: f.envSet, storedSet: f.storedSet, source: f.source
+            });
+        });
+        return jsonResponse({
+            success: true,
+            licence: 'valid',
+            order: SYSTEM_CONFIG_SCHEMA.map(function(s) { return s.group; }).filter(function(v,i,a){return a.indexOf(v)===i;}),
+            groups: grouped,
+            note: 'LICENCE_CODE is the ONLY variable you still need to set in Cloudflare Dashboard → Variables. All other secrets may be set here in SYSTEM CONFIG. If a field shows source=Cloudflare Variable, that takes priority and a matching Cloudflare Variable was already set.'
+        });
+    } catch (e) {
+        return jsonResponse({ success: false, error: (e && e.message) ? e.message : 'Failed to load system config.' }, 500);
+    }
+}
+
+async function handleSystemConfigSave(request, env) {
+    const authorized = await isOwnerAuthorizedAsync(request, env);
+    if (!authorized.ok) return unauthorizedResponse(authorized.error);
+    try {
+        const body = await request.json().catch(function() { return null; });
+        const patch = body && body.patch ? body.patch : body;
+        const saved = await syscfgBulkUpdate(env, patch || {});
+        if (!saved.ok) return jsonResponse({ success: false, error: saved.error || 'Save failed' }, 400);
+        // Re-read to return updated masked previews + sources
+        const fields = await syscfgGetSchemaWithMaskedValues(env);
+        const grouped = {};
+        fields.forEach(function(f) {
+            grouped[f.group] = grouped[f.group] || [];
+            grouped[f.group].push({
+                key: f.key, label: f.label, type: f.type,
+                placeholder: f.placeholder, help: f.help,
+                value: f.value, envSet: f.envSet, storedSet: f.storedSet, source: f.source
+            });
+        });
+        return jsonResponse({
+            success: true,
+            result: saved.result,
+            groups: grouped,
+            message: 'System configuration saved. ' + saved.result.saved + ' updated, ' + saved.result.cleared + ' cleared, ' + saved.result.skipped.length + ' unchanged.'
+        });
+    } catch (e) {
+        return jsonResponse({ success: false, error: (e && e.message) ? e.message : 'Save failed.' }, 500);
+    }
+}
+
 async function handleOwnerConfigSave(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
     if (!env.OWNER_STATS) return jsonResponse({ success: false, error: 'Stats storage not configured' }, 503);
 
@@ -1720,7 +2045,7 @@ async function readSiteSelectorRaw(env) {
 }
 
 async function handleOwnerSiteSelector(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
     try {
         const read = await readSiteSelectorRaw(env);
@@ -1738,7 +2063,7 @@ async function handleOwnerSiteSelector(request, env) {
 }
 
 async function handleOwnerSiteSelectorSave(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
     if (!env || !env.OWNER_STATS) return jsonResponse({ success: false, error: 'Storage not configured' }, 503);
     const body = await request.json().catch(function() { return null; });
@@ -1873,7 +2198,7 @@ async function handleOwnerOrderLookup(request, env) {
         return jsonResponse({ success: false, error: 'Stats storage not configured' }, 503);
     }
 
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) {
         return new Response(JSON.stringify({
             success: false,
@@ -1894,12 +2219,16 @@ async function handleOwnerOrderLookup(request, env) {
         return jsonResponse({ success: false, error: 'Missing payment reference' }, 400);
     }
 
+    // Resolve secrets ONCE for nested lookups (Cloudflare vars -> system config KV)
+    const _PAYSTACK_SECRET = String(await resolveSecret(env, 'PAYSTACK_SECRET_KEY') || '');
+    const _FLUTTERWAVE_SECRET = String(await resolveSecret(env, 'FLUTTERWAVE_SECRET_KEY') || '');
+
     let record = await getPaymentRecord(env, reference);
 
     async function tryPaystackOwnerLookup() {
-        if (!env.PAYSTACK_SECRET_KEY) return false;
+        if (!_PAYSTACK_SECRET) return false;
         try {
-            const verifyResult = await verifyPaystackTransaction(reference, env.PAYSTACK_SECRET_KEY);
+            const verifyResult = await verifyPaystackTransaction(reference, _PAYSTACK_SECRET);
             if (verifyResult && verifyResult.status && verifyResult.data && verifyResult.data.status === 'success') {
                 const transaction = verifyResult.data;
                 await confirmPaystackPayment(env, {
@@ -1918,9 +2247,9 @@ async function handleOwnerOrderLookup(request, env) {
     }
 
     async function tryFlutterwaveOwnerLookup() {
-        if (!env.FLUTTERWAVE_SECRET_KEY) return false;
+        if (!_FLUTTERWAVE_SECRET) return false;
         try {
-            const verifyResult = await verifyFlutterwaveTransaction(reference, env.FLUTTERWAVE_SECRET_KEY);
+            const verifyResult = await verifyFlutterwaveTransaction(reference, _FLUTTERWAVE_SECRET);
             if (verifyResult && verifyResult.status && verifyResult.data && String(verifyResult.data.status || '').toLowerCase() === 'success') {
                 const transaction = verifyResult.data;
                 await confirmFlutterwavePayment(env, {
@@ -1957,13 +2286,17 @@ async function handlePaymentStatus(request, env) {
         return jsonResponse({ success: false, error: 'Missing payment reference' }, 400);
     }
 
+    // Resolve secrets ONCE (Cloudflare vars → system config KV)
+    const _PAYSTACK_SECRET = String(await resolveSecret(env, 'PAYSTACK_SECRET_KEY') || '');
+    const _FLUTTERWAVE_SECRET = String(await resolveSecret(env, 'FLUTTERWAVE_SECRET_KEY') || '');
+
     let record = await getPaymentRecord(env, reference);
 
     if (!record) {
         let deferredHint = null;
-        if (env.PAYSTACK_SECRET_KEY) {
+        if (_PAYSTACK_SECRET) {
             try {
-                const verifyResult = await verifyPaystackTransaction(reference, env.PAYSTACK_SECRET_KEY);
+                const verifyResult = await verifyPaystackTransaction(reference, _PAYSTACK_SECRET);
                 if (verifyResult && verifyResult.status && verifyResult.data && verifyResult.data.status === 'success') {
                     const transaction = verifyResult.data;
                     await confirmPaystackPayment(env, {
@@ -1984,9 +2317,9 @@ async function handlePaymentStatus(request, env) {
                 deferredHint = { retryable: true, error: error && error.message ? error.message : 'Status check failed', code: 409 };
             }
         }
-        if (!record && env.FLUTTERWAVE_SECRET_KEY) {
+        if (!record && _FLUTTERWAVE_SECRET) {
             try {
-                const verifyResult = await verifyFlutterwaveTransaction(reference, env.FLUTTERWAVE_SECRET_KEY);
+                const verifyResult = await verifyFlutterwaveTransaction(reference, _FLUTTERWAVE_SECRET);
                 if (verifyResult && verifyResult.status && verifyResult.data && String(verifyResult.data.status || '').toLowerCase() === 'success') {
                     const transaction = verifyResult.data;
                     await confirmFlutterwavePayment(env, {
@@ -2110,20 +2443,30 @@ function getPaystackFailureHint(message) {
     return '';
 }
 
-function handleHealthCheck(env) {
-    const username = env.OWNER_DASHBOARD_USERNAME || env.OWNER_USERNAME;
-    const password = env.OWNER_DASHBOARD_PASSWORD || env.OWNER_PASSWORD;
+async function handleHealthCheck(request, env) {
+    const username = String(await resolveSecret(env, 'OWNER_DASHBOARD_USERNAME') || '')
+        || String(await resolveSecret(env, 'OWNER_USERNAME') || '');
+    const password = String(await resolveSecret(env, 'OWNER_DASHBOARD_PASSWORD') || '')
+        || String(await resolveSecret(env, 'OWNER_PASSWORD') || '');
+    const paystackSecret = await resolveSecret(env, 'PAYSTACK_SECRET_KEY');
+    const flutterwaveSecret = await resolveSecret(env, 'FLUTTERWAVE_SECRET_KEY');
+    const flutterwavePublic = await resolveSecret(env, 'FLUTTERWAVE_PUBLIC_KEY');
+    const ownerEmail = await resolveSecret(env, 'OWNER_EMAIL');
+    const gmailUser = await resolveSecret(env, 'GMAIL_SMTP_USER');
+    const gmailPass = await resolveSecret(env, 'GMAIL_SMTP_PASSWORD');
+    const resendKey = await resolveSecret(env, 'RESEND_API_KEY');
+    const r2Bucket = await resolveSecret(env, 'R2_BUCKET_NAME');
     const checks = {
         ownerStatsBound: Boolean(env.OWNER_STATS),
-        paystackSecretConfigured: Boolean(env.PAYSTACK_SECRET_KEY),
-        flutterwaveSecretConfigured: Boolean(env.FLUTTERWAVE_SECRET_KEY),
-        flutterwavePublicKeyEnvConfigured: Boolean(env.FLUTTERWAVE_PUBLIC_KEY),
-        ownerEmailConfigured: Boolean(env.OWNER_EMAIL),
+        paystackSecretConfigured: Boolean(paystackSecret),
+        flutterwaveSecretConfigured: Boolean(flutterwaveSecret),
+        flutterwavePublicKeyEnvConfigured: Boolean(flutterwavePublic),
+        ownerEmailConfigured: Boolean(ownerEmail),
         ownerDashboardCredsConfigured: Boolean(username && password),
-        gmailSmtpConfigured: Boolean(env.GMAIL_SMTP_USER && env.GMAIL_SMTP_PASSWORD),
-        resendConfigured: Boolean(env.RESEND_API_KEY),
+        gmailSmtpConfigured: Boolean(gmailUser && gmailPass),
+        resendConfigured: Boolean(resendKey),
         r2BucketBound: Boolean(env.PRODUCT_IMAGES && typeof env.PRODUCT_IMAGES.put === 'function'),
-        r2BucketNamed: Boolean(env.R2_BUCKET_NAME)
+        r2BucketNamed: Boolean(r2Bucket)
     };
     const missing = Object.keys(checks).filter(function(key) { return checks[key] === false; });
     let availableKeys = [];
@@ -2136,7 +2479,8 @@ function handleHealthCheck(env) {
         success: true,
         checks: checks,
         missing: missing,
-        availableKeys: availableKeys
+        availableKeys: availableKeys,
+        onlyCloudflareEnvNeeded: 'LICENCE_CODE (set in Cloudflare Dashboard → Variables). All other secrets are editable in Owner dashboard → SYSTEM CONFIG section.'
     });
 }
 
@@ -2144,10 +2488,10 @@ function handleHealthCheck(env) {
 // SEND ORDER EMAILS
 // =========================================================
 async function sendOrderEmails(transaction, env, method, customerInfo, orderRecord) {
-    const ownerEmail = env.OWNER_EMAIL;
+    const ownerEmail = String(await resolveSecret(env, 'OWNER_EMAIL') || '');
     const customer = customerInfo || (transaction.metadata ? transaction.metadata.custom_fields : []);
     const customerEmail = transaction.customer ? transaction.customer.email : '';
-    const fromEmail = getFromEmail(env);
+    const fromEmail = await getFromEmail(env);
     const emailContext = await getEmailContext(env);
 
     // Build owner email
@@ -2196,7 +2540,7 @@ async function sendOrderEmails(transaction, env, method, customerInfo, orderReco
 // SEND MANUAL ORDER EMAIL
 // =========================================================
 async function sendManualOrderEmail(data, env) {
-    const ownerEmail = env.OWNER_EMAIL;
+    const ownerEmail = String(await resolveSecret(env, 'OWNER_EMAIL') || '');
 
     const subject = 'NEW MANUAL PAYMENT ORDER - ' + data.order_ref;
     const body = buildManualOrderEmail(data);
@@ -2288,6 +2632,38 @@ function getDefaultOwnerStats() {
         affiliateClicks: {},
         lastUpdated: null
     };
+}
+
+async function isOwnerAuthorizedAsync(request, env) {
+    // Primary owner auth: resolves credentials from env vars first, then
+    // falls back to SYSTEM CONFIG stored encrypted in KV via resolveSecret.
+    // NOTE: we still have OWNER_USERNAME / OWNER_PASSWORD legacy fallback
+    // so existing Cloudflare vars with those old names still work.
+    let expectedUsername = String(await resolveSecret(env, 'OWNER_DASHBOARD_USERNAME') || '');
+    if (!expectedUsername) expectedUsername = String(await resolveSecret(env, 'OWNER_USERNAME') || '');
+    let expectedPassword = String(await resolveSecret(env, 'OWNER_DASHBOARD_PASSWORD') || '');
+    if (!expectedPassword) expectedPassword = String(await resolveSecret(env, 'OWNER_PASSWORD') || '');
+
+    if (!expectedUsername || !expectedPassword) {
+        return { ok: false, error: 'Owner dashboard credentials are not configured. Set Owner Username and Owner Password in SYSTEM CONFIG section of Owner dashboard.' };
+    }
+    const authHeader = request.headers.get('Authorization') || '';
+    if (!authHeader.startsWith('Basic ')) {
+        return { ok: false, error: 'Authentication required' };
+    }
+    try {
+        const encoded = authHeader.slice(6);
+        const decoded = atob(encoded);
+        const separatorIndex = decoded.indexOf(':');
+        const username = separatorIndex >= 0 ? decoded.slice(0, separatorIndex) : decoded;
+        const password = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : '';
+        if (username === expectedUsername && password === expectedPassword) {
+            return { ok: true };
+        }
+    } catch (error) {
+        return { ok: false, error: 'Invalid authentication header' };
+    }
+    return { ok: false, error: 'Invalid owner username or password' };
 }
 
 function isOwnerAuthorized(request, env) {
@@ -2824,6 +3200,18 @@ async function getEmailContext(env) {
     let logoImage = logoConfig && logoConfig.type === 'image' ? String(logoConfig.image || '') : '';
     let logoUrl = '';
 
+    // Pre-resolve async system config R2 URL bases to closure-local strings so the inner
+    // sync helper resolveAssetUrl does not need to await inside every call.
+    const __r2Custom = String(await resolveSecret(env, 'R2_CUSTOM_DOMAIN') || '').trim();
+    const __r2Public = String(await resolveSecret(env, 'R2_PUBLIC_URL') || '').trim();
+    function _resolveCdnKeySyncBase(key) {
+        if (__r2Custom) {
+            const base = /^https?:\/\//i.test(__r2Custom) ? __r2Custom.replace(/\/+$/, '') : ('https://' + __r2Custom.replace(/\/+$/, ''));
+            return base + '/' + key;
+        }
+        if (__r2Public) return __r2Public.replace(/\/+$/, '') + '/' + key;
+        return '/cdn/' + key;
+    }
     function resolveAssetUrl(rawUrl) {
         if (!rawUrl) return '';
         const trimmed = String(rawUrl).trim();
@@ -2831,15 +3219,7 @@ async function getEmailContext(env) {
         if (/^https?:\/\//i.test(trimmed)) return trimmed;
         if (trimmed.startsWith('/cdn/') || trimmed.startsWith('cdn/')) {
             const key = trimmed.replace(/^\/?cdn\//, '');
-            const customDomain = String(env.R2_CUSTOM_DOMAIN || '').trim();
-            const publicUrl = String(env.R2_PUBLIC_URL || '').trim();
-            if (customDomain) {
-                const base = /^https?:\/\//i.test(customDomain) ? customDomain.replace(/\/+$/, '') : ('https://' + customDomain.replace(/\/+$/, ''));
-                return base + '/' + key;
-            }
-            if (publicUrl) {
-                return publicUrl.replace(/\/+$/, '') + '/' + key;
-            }
+            return _resolveCdnKeySyncBase(key);
         }
         if (website) {
             try {
@@ -3486,7 +3866,10 @@ function buildManualCustomerEmail(data) {
 // SMTP EMAIL SENDER (Gmail)
 // =========================================================
 async function sendEmail(env, email) {
-    const smtpConfigured = Boolean(env.GMAIL_SMTP_USER && env.GMAIL_SMTP_PASSWORD);
+    const gmailUser = String(await resolveSecret(env, 'GMAIL_SMTP_USER') || '');
+    const gmailPass = String(await resolveSecret(env, 'GMAIL_SMTP_PASSWORD') || '');
+    const resendApi = String(await resolveSecret(env, 'RESEND_API_KEY') || '');
+    const smtpConfigured = Boolean(gmailUser && gmailPass);
     let smtpError = null;
 
     if (smtpConfigured) {
@@ -3499,7 +3882,7 @@ async function sendEmail(env, email) {
         }
     }
 
-    if (env.RESEND_API_KEY) {
+    if (resendApi) {
         try {
             await withTimeout(sendViaResend(env, email), 15000, 'Resend send timed out');
             return { provider: 'resend' };
@@ -3517,11 +3900,12 @@ async function sendEmail(env, email) {
 }
 
 async function sendViaGmailSmtp(env, email) {
-    const host = env.GMAIL_SMTP_HOST || 'smtp.gmail.com';
-    const port = parseInt(env.GMAIL_SMTP_PORT || '465', 10);
-    const user = env.GMAIL_SMTP_USER;
-    const pass = env.GMAIL_SMTP_PASSWORD;
-    const from = env.GMAIL_FROM_EMAIL || user;
+    const host = String(await resolveSecret(env, 'GMAIL_SMTP_HOST') || '') || 'smtp.gmail.com';
+    const port = parseInt(String(await resolveSecret(env, 'GMAIL_SMTP_PORT') || '465'), 10) || 465;
+    const user = String(await resolveSecret(env, 'GMAIL_SMTP_USER') || '');
+    const pass = String(await resolveSecret(env, 'GMAIL_SMTP_PASSWORD') || '');
+    const gmailFrom = String(await resolveSecret(env, 'GMAIL_FROM_EMAIL') || '');
+    const from = gmailFrom || user;
     const toList = Array.isArray(email.to) ? email.to : [email.to];
     const message = buildMimeMessage({
         from: from,
@@ -3575,7 +3959,13 @@ async function sendViaGmailSmtp(env, email) {
 }
 
 async function sendViaResend(env, email) {
-    const from = env.RESEND_FROM_EMAIL || env.MAIL_FROM || email.from || env.GMAIL_SMTP_USER || env.OWNER_EMAIL;
+    const resendFrom = String(await resolveSecret(env, 'RESEND_FROM_EMAIL') || '');
+    const mailFrom   = String(await resolveSecret(env, 'MAIL_FROM') || '');
+    const gmailSmpt  = String(await resolveSecret(env, 'GMAIL_SMTP_USER') || '');
+    const ownrEmail  = String(await resolveSecret(env, 'OWNER_EMAIL') || '');
+    const gmailFrom  = String(await resolveSecret(env, 'GMAIL_FROM_EMAIL') || '');
+    const resendKey  = String(await resolveSecret(env, 'RESEND_API_KEY') || '');
+    const from = resendFrom || mailFrom || (email && email.from ? String(email.from) : '') || gmailSmpt || ownrEmail;
     const toList = Array.isArray(email.to) ? email.to : [email.to];
     const payload = {
         from: from,
@@ -3599,7 +3989,7 @@ async function sendViaResend(env, email) {
     const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-            'Authorization': 'Bearer ' + env.RESEND_API_KEY,
+            'Authorization': 'Bearer ' + resendKey,
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -3792,11 +4182,17 @@ function extractEmailAddress(value) {
     return (match ? match[1] : String(value || '')).trim();
 }
 
-function getFromEmail(env) {
-    if (env.GMAIL_SMTP_USER || env.GMAIL_SMTP_PASSWORD) {
-        return env.GMAIL_FROM_EMAIL || env.GMAIL_SMTP_USER || env.OWNER_EMAIL;
+async function getFromEmail(env) {
+    const gmailUser  = String(await resolveSecret(env, 'GMAIL_SMTP_USER') || '');
+    const gmailPass  = String(await resolveSecret(env, 'GMAIL_SMTP_PASSWORD') || '');
+    const gmailFrom  = String(await resolveSecret(env, 'GMAIL_FROM_EMAIL') || '');
+    const ownerEmail = String(await resolveSecret(env, 'OWNER_EMAIL') || '');
+    const resendFrom = String(await resolveSecret(env, 'RESEND_FROM_EMAIL') || '');
+    const mailFrom   = String(await resolveSecret(env, 'MAIL_FROM') || '');
+    if (gmailUser || gmailPass) {
+        return gmailFrom || gmailUser || ownerEmail;
     }
-    return env.RESEND_FROM_EMAIL || env.MAIL_FROM || env.OWNER_EMAIL || env.GMAIL_FROM_EMAIL || env.GMAIL_SMTP_USER;
+    return resendFrom || mailFrom || ownerEmail || gmailFrom || gmailUser;
 }
 
 function withTimeout(promise, ms, message) {
@@ -3958,9 +4354,9 @@ function detectImageFolderFromKey(configKey) {
     return R2_IMAGE_FOLDERS.general;
 }
 
-function buildR2ObjectUrl(env, objectKey) {
-    const customDomain = String(env.R2_CUSTOM_DOMAIN || '').trim();
-    const publicUrl = String(env.R2_PUBLIC_URL || '').trim();
+async function buildR2ObjectUrl(env, objectKey) {
+    const customDomain = String(await resolveSecret(env, 'R2_CUSTOM_DOMAIN') || '').trim();
+    const publicUrl = String(await resolveSecret(env, 'R2_PUBLIC_URL') || '').trim();
     const safeKey = String(objectKey || '').replace(/^\/+/, '');
     if (customDomain) {
         const base = customDomain.replace(/\/+$/, '');
@@ -3973,7 +4369,7 @@ function buildR2ObjectUrl(env, objectKey) {
 }
 
 async function handleOwnerImageUpload(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
 
     if (!env.PRODUCT_IMAGES || typeof env.PRODUCT_IMAGES.put !== 'function') {
@@ -4078,7 +4474,7 @@ async function handleOwnerImageUpload(request, env) {
         }, 502);
     }
 
-    const url = buildR2ObjectUrl(env, objectKey);
+    const url = await buildR2ObjectUrl(env, objectKey);
     return jsonResponse({
         success: true,
         url: url,
@@ -4108,7 +4504,7 @@ function normalizeR2DeleteKey(input) {
 }
 
 async function handleOwnerImageDelete(request, env) {
-    const authorized = isOwnerAuthorized(request, env);
+    const authorized = await isOwnerAuthorizedAsync(request, env);
     if (!authorized.ok) return unauthorizedResponse(authorized.error);
 
     if (!env.PRODUCT_IMAGES || typeof env.PRODUCT_IMAGES.delete !== 'function') {
