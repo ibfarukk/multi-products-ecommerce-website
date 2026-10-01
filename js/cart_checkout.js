@@ -143,6 +143,18 @@
             manualBox.classList.add('visible');
             manualBox.style.display = 'block';
             manualBox.classList.remove('owner-hidden');
+            try { renderManualDetails(); } catch (_e) {}
+            if (typeof MANUAL_PAYMENT === 'undefined' || !manualBox.innerHTML) {
+                for (var d = 150; d <= 900; d += 250) {
+                    (function(delay) {
+                        setTimeout(function() {
+                            try { renderManualDetails(); } catch (_) {}
+                            var box = $('cart-manual-details');
+                            if (box && !box.innerHTML) { try { renderManualDetails(); } catch (_) {} }
+                        }, delay);
+                    })(d);
+                }
+            }
         } else {
             manualBox.classList.remove('visible');
             manualBox.style.display = 'none';

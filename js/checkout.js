@@ -124,6 +124,18 @@
             manualBox.classList.add('visible');
             manualBox.style.display = 'block';
             manualBox.classList.remove('owner-hidden');
+            try { renderManualDetails(); } catch (_e) {}
+            if (typeof MANUAL_PAYMENT === 'undefined' || !manualBox.innerHTML) {
+                for (var d = 150; d <= 900; d += 250) {
+                    (function(delay) {
+                        setTimeout(function() {
+                            try { renderManualDetails(); } catch (_) {}
+                            var box = $('checkout-manual-details');
+                            if (box && !box.innerHTML) { try { renderManualDetails(); } catch (_) {} }
+                        }, delay);
+                    })(d);
+                }
+            }
         } else {
             manualBox.classList.remove('visible');
             manualBox.style.display = 'none';
@@ -717,6 +729,17 @@
                 manualInfo.classList.toggle('visible', isManual);
                 if (isManual) {
                     manualInfo.style.display = 'block';
+                    try { renderManualBankDetailsInline(); } catch (_e) {}
+                    if (typeof MANUAL_PAYMENT === 'undefined' || !manualInfo.innerHTML) {
+                        for (var d = 150; d <= 900; d += 250) {
+                            (function(delay) {
+                                setTimeout(function() {
+                                    try { renderManualBankDetailsInline(); } catch (_) {}
+                                    if (manualInfo && !manualInfo.innerHTML) { try { renderManualBankDetailsInline(); } catch (_) {} }
+                                }, delay);
+                            })(d);
+                        }
+                    }
                 } else {
                     manualInfo.style.display = 'none';
                 }
