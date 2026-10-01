@@ -32,6 +32,14 @@ export default {
             return handleFlutterwaveWebhook(request, env);
         }
 
+        // Public webhook aliases (conventional URLs)
+        if (path === '/api/public/paystack/webhook' && request.method === 'POST') {
+            return handlePaystackWebhook(request, env);
+        }
+        if (path === '/api/public/flutterwave/webhook' && request.method === 'POST') {
+            return handleFlutterwaveWebhook(request, env);
+        }
+
         // Verify Payment
         if (path === '/api/verify-payment' && request.method === 'POST') {
             return handleVerifyPayment(request, env);
