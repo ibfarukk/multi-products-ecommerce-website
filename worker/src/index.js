@@ -1,19 +1,6 @@
-/* =========================================================
-   PMELAB PRODUCT TEMPLATE — CLOUDFLARE WORKER
-   ========================================================= */
+
 
 import { connect } from 'cloudflare:sockets';
-
-// ---- INTERNAL HASHED LICENCE FINGERPRINT ----------------
-// This is NOT a plain licence key. It is a SHA-256 hex digest
-// of the licence string issued by PMELAB TECHNOLOGY LIMITED.
-// Comparing a hash (rather than plaintext) in source code means
-// there is no human-readable licence token anywhere in the repo
-// and the only way to pass the check is to know, or have been
-// issued by PMELAB, the exact matching pre-image string, which
-// then must be set as environment variable LICENCE_CODE at the
-// Cloudflare dashboard / .env / wrangler dev.vars secret level.
-// Source of hash: crypto.createHash('sha256').update(issuee_key)
 const _LIC = ([
     0xb6,0x3c,0x54,0x4b,0x4d,0x02,0xd8,0x23,0x9c,0xa4,0xfa,0x03,0x3a,0xcf,0xe2,0x93,
     0x5f,0x9e,0xbf,0xf0,0x7e,0xaf,0x97,0xe3,0x33,0x0b,0x0d,0x3c,0x56,0xab,0x30,0xea
