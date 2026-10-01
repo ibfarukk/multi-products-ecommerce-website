@@ -43,6 +43,12 @@
         root.style.setProperty('--border', BRAND.borderColor);
     }
 
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = String(text || '');
+        return div.innerHTML;
+    }
+
     function initMobileMenu() {
         const btn = document.querySelector('.mobile-menu-btn');
         const nav = document.querySelector('.mobile-nav');
@@ -246,16 +252,34 @@
         const m = String(method || '').toLowerCase();
         if (m === 'paystack') return Boolean(cfg.paystackEnabled) && Boolean(cfg.paystackPublicKey);
         if (m === 'flutterwave') return Boolean(cfg.flutterwaveEnabled) && Boolean(cfg.flutterwavePublicKey);
-        if (m === 'manual') return Boolean(cfg.manualEnabled);
+        if (m === 'manual') {
+            if (typeof MANUAL_PAYMENT !== 'undefined' && MANUAL_PAYMENT && typeof MANUAL_PAYMENT.enabled === 'boolean') return Boolean(MANUAL_PAYMENT.enabled);
+            return Boolean(cfg.manualEnabled);
+        }
         return false;
     }
 
     function showPaymentOptions(containerId) {
         const cfg = (typeof PAYMENT !== 'undefined' && PAYMENT) ? PAYMENT : {};
+        const manualCfg = (typeof MANUAL_PAYMENT !== 'undefined' && MANUAL_PAYMENT) ? MANUAL_PAYMENT : null;
         const scope = containerId ? document.getElementById(containerId) : document;
         if (!scope) return;
         scope.querySelectorAll('[data-payment-opt="flutterwave"]').forEach(function(el) {
             el.style.display = (cfg.flutterwaveEnabled && cfg.flutterwavePublicKey) ? '' : 'none';
+        });
+        scope.querySelectorAll('[data-payment-opt="paystack"]').forEach(function(el) {
+            el.style.display = (cfg.paystackEnabled && cfg.paystackPublicKey) ? '' : 'none';
+        });
+        scope.querySelectorAll('.payment-method[data-payment]').forEach(function(el) {
+            var method = String(el.getAttribute('data-payment') || '').toLowerCase();
+            if (!method) return;
+            if (method === 'flutterwave' || method === 'paystack') return;
+            if (method === 'manual') {
+                var manualEnabled = true;
+                if (manualCfg && typeof manualCfg.enabled === 'boolean') manualEnabled = Boolean(manualCfg.enabled);
+                else if (typeof cfg.manualEnabled === 'boolean') manualEnabled = Boolean(cfg.manualEnabled);
+                el.style.display = manualEnabled ? '' : 'none';
+            }
         });
     }
 
@@ -556,16 +580,94 @@
         var manualInfo = document.querySelector('.manual-payment-info');
         var manualReceiptGroup = document.getElementById('manual-receipt-group');
         function renderManualBankDetailsInline() {
-            if (!manualInfo || typeof MANUAL_PAYMENT === 'undefined') return;
-            manualInfo.innerHTML = MANUAL_PAYMENT.enabled ?
-                ('<div style="border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff;margin-top:10px;">' +
-                    '<div style="font-weight:800;margin-bottom:6px;">Bank Details</div>' +
-                    '<div style="display:grid;gap:4px;font-size:0.95rem;">' +
-                    '<div><span style="color:var(--muted);">Bank:</span> ' + (MANUAL_PAYMENT.bankName || '') + '</div>' +
-                    '<div><span style="color:var(--muted);">Account Name:</span> ' + (MANUAL_PAYMENT.accountName || '') + '</div>' +
-                    '<div><span style="color:var(--muted);">Account Number:</span> ' + (MANUAL_PAYMENT.accountNumber || '') + '</div>' +
-                    (MANUAL_PAYMENT.paymentDeadline ? '<div style="color:var(--muted);margin-top:6px;">' + MANUAL_PAYMENT.paymentDeadline + '</div>' : '') +
-                    '</div></div>') : '';
+            if (!manualInfo || typeof MANUAL_PAYMENT === 'undefined' || MANUAL_PAYMENT === null) {
+                if (manualInfo) manualInfo.innerHTML = '';
+                return;
+            }
+            var isEnabled = MANUAL_PAYMENT.enabled !== false;
+            if (typeof PAYMENT !== 'undefined' && PAYMENT && PAYMENT.manualEnabled === false) isEnabled = false;
+            if (!isEnabled) {
+                manualInfo.innerHTML = '';
+                var manualMethod = manualInfo.parentNode ? manualInfo.parentNode.querySelector('.payment-method[data-payment="manual"]') : null;
+                if (manualMethod) manualMethod.style.display = 'none';
+                return;
+            }
+            var bank = String(MANUAL_PAYMENT.bankName || '').trim();
+            var name = String(MANUAL_PAYMENT.accountName || '').trim();
+            var number = String(MANUAL_PAYMENT.accountNumber || '').trim();
+            var deadline = String(MANUAL_PAYMENT.paymentDeadline || '').trim();
+            var instructions = String(MANUAL_PAYMENT.instructions || '').trim();
+
+            var html = '';
+            html += '<div style="margin-top: 12px; border: 1px solid #d1fae5; background: linear-gradient(180deg, #ecfdf5 0%, #f0fdf4 100%); border-radius: 14px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(15, 118, 110, 0.06);">';
+            html += '<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">';
+            html += '<div style="width:34px;height:34px;border-radius:10px;background:#0f766e;display:flex;align-items:center;justify-content:center;color:white;flex-shrink:0;">';
+            html += '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><line x1="2" y1="13" x2="22" y2="13"/></svg>';
+            html += '</div>';
+            html += '<div style="font-weight: 900; font-size: 0.95rem; letter-spacing: 0.01em; color: #065f46;">TRANSFER TO OUR BANK ACCOUNT</div>';
+            html += '</div>';
+            html += '<div style="display:grid; gap: 8px; padding: 12px 14px; background: #fff; border: 1px solid #a7f3d0; border-radius: 12px;">';
+            if (bank) {
+                html += '<div style="display:flex; gap: 6px; align-items: flex-start;">';
+                html += '<span style="min-width: 118px; font-size: 0.82rem; color: #64748b; font-weight: 700; padding-top: 3px;">Bank Name</span>';
+                html += '<span style="font-size: 0.96rem; font-weight: 900; color: #0f172a; letter-spacing: 0.005em;">' + escapeHtml(bank) + '</span>';
+                html += '</div>';
+            }
+            if (name) {
+                html += '<div style="display:flex; gap: 6px; align-items: flex-start;">';
+                html += '<span style="min-width: 118px; font-size: 0.82rem; color: #64748b; font-weight: 700; padding-top: 3px;">Account Name</span>';
+                html += '<span style="font-size: 0.96rem; font-weight: 900; color: #0f172a; letter-spacing: 0.005em;">' + escapeHtml(name) + '</span>';
+                html += '</div>';
+            }
+            if (number) {
+                html += '<div style="display:flex; gap: 6px; align-items: flex-start;">';
+                html += '<span style="min-width: 118px; font-size: 0.82rem; color: #64748b; font-weight: 700; padding-top: 3px;">Account Number</span>';
+                html += '<span style="font-size: 1.02rem; font-weight: 900; color: #0f766e; letter-spacing: 0.08em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">' + escapeHtml(number) + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+            if (instructions) {
+                html += '<div style="margin-top: 10px; padding: 8px 10px; background: rgba(15, 118, 110, 0.05); border-radius: 9px; color: #0f172a; font-size: 0.86rem; line-height: 1.5;">' + escapeHtml(instructions) + '</div>';
+            }
+            if (deadline) {
+                html += '<div style="margin-top: 10px; display:flex; align-items:flex-start; gap: 8px;">';
+                html += '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-top:2px; flex-shrink:0; color: #0f766e;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+                html += '<span style="font-size: 0.82rem; color: #0f766e; font-weight: 800; line-height: 1.4;">' + escapeHtml(deadline) + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+            manualInfo.innerHTML = html;
+        }
+        function ensureValidCheckedRadio() {
+            var all = Array.from(document.querySelectorAll('.payment-methods input[name="payment"]'));
+            var currentChecked = all.find(function(r) { return r.checked; });
+            var cfgDefault = null;
+            try {
+                if (typeof PAYMENT !== 'undefined' && PAYMENT && typeof PAYMENT.defaultMethod === 'string') {
+                    cfgDefault = String(PAYMENT.defaultMethod).toLowerCase().trim();
+                }
+            } catch (_p) {}
+            function isUsable(r) {
+                if (!r) return false;
+                var card = r.closest ? r.closest('.payment-method') : null;
+                if (card && window.getComputedStyle(card).display === 'none') return false;
+                return isPaymentEnabled(r.value);
+            }
+            if (cfgDefault) {
+                var def = all.find(function(r) { return String(r.value).toLowerCase() === cfgDefault; });
+                if (isUsable(def)) currentChecked = def;
+            }
+            if (currentChecked && isUsable(currentChecked)) {
+                if (currentChecked.checked !== true) currentChecked.checked = true;
+                return currentChecked.value;
+            }
+            var fallback = all.find(function(r) { return isUsable(r); });
+            if (!fallback) fallback = all[0];
+            if (fallback) {
+                fallback.checked = true;
+                fallback.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return fallback ? fallback.value : null;
         }
         function updateSelectedMethodCard() {
             var selected = document.querySelector('.payment-methods input[name="payment"]:checked');
@@ -573,14 +675,50 @@
             document.querySelectorAll('.payment-methods .payment-method').forEach(function(el) { el.classList.remove('selected'); });
             var card = selected && selected.closest ? selected.closest('.payment-method') : null;
             if (card) card.classList.add('selected');
-            if (manualInfo) manualInfo.style.display = (val === 'manual') ? '' : 'none';
-            if (manualReceiptGroup) manualReceiptGroup.style.display = (val === 'manual') ? '' : 'none';
+            if (manualInfo) {
+                var hasDetails = manualInfo.innerHTML && manualInfo.innerHTML.trim().length > 0;
+                var shouldShow = (val === 'manual') && hasDetails && isPaymentEnabled('manual');
+                manualInfo.style.display = shouldShow ? 'block' : 'none';
+            }
+            if (manualReceiptGroup) {
+                var receiptRequired = true;
+                try {
+                    if (typeof PAYMENT !== 'undefined' && PAYMENT && typeof PAYMENT.manualReceiptRequired === 'boolean') receiptRequired = PAYMENT.manualReceiptRequired;
+                    if (typeof MANUAL_PAYMENT !== 'undefined' && MANUAL_PAYMENT && typeof MANUAL_PAYMENT.receiptRequired === 'boolean') receiptRequired = MANUAL_PAYMENT.receiptRequired;
+                } catch (_r) {}
+                manualReceiptGroup.style.display = (val === 'manual') ? '' : 'none';
+                var reqSpan = manualReceiptGroup.querySelector('.required');
+                if (reqSpan) reqSpan.style.display = receiptRequired ? '' : 'none';
+                var fileInput = manualReceiptGroup.querySelector('input[type="file"]');
+                if (fileInput) fileInput.required = !!receiptRequired;
+            }
         }
         document.querySelectorAll('.payment-methods input[name="payment"]').forEach(function(r) {
             r.addEventListener('change', updateSelectedMethodCard);
         });
         updateSelectedMethodCard();
         renderManualBankDetailsInline();
+        var chosen = ensureValidCheckedRadio();
+        if (!chosen || chosen !== 'paystack') {
+            document.querySelectorAll('.payment-methods input[name="payment"]').forEach(function(r) {
+                if (r.value !== 'paystack') return;
+                var card = r.closest ? r.closest('.payment-method') : null;
+                if (card && window.getComputedStyle(card).display === 'none') {
+                    if (r.checked) {
+                        r.checked = false;
+                        var nextEnabled = Array.from(document.querySelectorAll('.payment-methods input[name="payment"]')).find(function(x) {
+                            var c = x.closest ? x.closest('.payment-method') : null;
+                            return c && window.getComputedStyle(c).display !== 'none' && isPaymentEnabled(x.value);
+                        });
+                        if (nextEnabled) {
+                            nextEnabled.checked = true;
+                            nextEnabled.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                }
+            });
+        }
+        updateSelectedMethodCard();
 
         function getInlineCustomer() {
             return {
