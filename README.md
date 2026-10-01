@@ -1,4 +1,4 @@
-# Current version is Version 3.0.0
+# Current version is Version 3.0.1
 # We provide Regular Update and new Features
 # UP COMING FEATURE IS (PORTFOLIO)
 
