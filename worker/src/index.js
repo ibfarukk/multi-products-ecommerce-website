@@ -2642,41 +2642,42 @@ async function getSiteMode(env) {
         }
 
         siteModeCache.promise = (async function() {
-            // Priority 1: read the site_selector.js KV override (owner's explicit mode switch)
             try {
-                const override = await getStoredSiteSelectorOverride(env);
-                if (typeof override === 'string' && override.length > 0) {
-                    const cleaned = stripJsComments(override);
-                    const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
-                    const matches = Array.from(String(cleaned || '').matchAll(regex));
-                    const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
-                    const mode = (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct')
-                        ? (raw === 'sigleproduct' ? 'singleproduct' : raw)
-                        : null;
-                    if (mode) {
-                        siteModeCache.value = mode;
-                        siteModeCache.loadedAt = Date.now();
-                        return mode;
+                // Priority 1: read the site_selector.js KV override (owner's explicit mode switch)
+                try {
+                    const override = await getStoredSiteSelectorOverride(env);
+                    if (typeof override === 'string' && override.length > 0) {
+                        const cleaned = stripJsComments(override);
+                        const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
+                        const matches = Array.from(String(cleaned || '').matchAll(regex));
+                        const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
+                        const mode = (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct')
+                            ? (raw === 'sigleproduct' ? 'singleproduct' : raw)
+                            : null;
+                        if (mode) {
+                            siteModeCache.value = mode;
+                            siteModeCache.loadedAt = Date.now();
+                            return mode;
+                        }
                     }
-                }
-            } catch (_ss) {}
+                } catch (_ss) {}
 
-            // Priority 2: use getStoredSiteMode which reads site-config-{mode} WEBSITE_TYPE_SELECT mirrors
-            try {
-                const storedMode = await getStoredSiteMode(env);
-                if (storedMode && (storedMode === 'singleproduct' || storedMode === 'multipleproducts' || storedMode === 'affiliate')) {
-                    siteModeCache.value = storedMode;
+                // Priority 2: use getStoredSiteMode which reads site-config-{mode} WEBSITE_TYPE_SELECT mirrors
+                try {
+                    const storedMode = await getStoredSiteMode(env);
+                    if (storedMode && (storedMode === 'singleproduct' || storedMode === 'multipleproducts' || storedMode === 'affiliate')) {
+                        siteModeCache.value = storedMode;
+                        siteModeCache.loadedAt = Date.now();
+                        return siteModeCache.value;
+                    }
+                } catch (_sm) {}
+
+                // Priority 3: fall back to raw ASSETS site_selector.js file (hardcoded default: multipleproducts)
+                if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
+                    siteModeCache.value = 'singleproduct';
                     siteModeCache.loadedAt = Date.now();
                     return siteModeCache.value;
                 }
-            } catch (_sm) {}
-
-            // Priority 3: fall back to raw ASSETS site_selector.js file (hardcoded default: multipleproducts)
-            if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
-                siteModeCache.value = 'singleproduct';
-                siteModeCache.loadedAt = Date.now();
-                return siteModeCache.value;
-            }
 
                 var response = null;
                 // Try the safest forms supported by Pages ASSETS binding in both

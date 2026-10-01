@@ -648,16 +648,17 @@
             var name = String(MANUAL_PAYMENT.accountName || '').trim();
             var number = String(MANUAL_PAYMENT.accountNumber || '').trim();
             var deadline = String(MANUAL_PAYMENT.paymentDeadline || '').trim();
+            function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
             function copyBtn(val) {
                 if (!val) return '';
-                return '<button type="button" class="manual-copy" data-copy="' + val.replace(/"/g, '&quot;') + '" title="Copy to clipboard" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--border-light);background:var(--primary-very-light);color:var(--primary-dark);font-size:0.68rem;font-weight:800;cursor:pointer;letter-spacing:0.02em;line-height:1;transition:all 150ms ease;" onmouseover="this.style.background=\'var(--primary-light)\'" onmouseout="this.style.background=\'var(--primary-very-light)\'">COPY</button>';
+                return '<button type="button" class="manual-copy" data-copy="' + esc(val) + '" title="Copy to clipboard" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--border-light);background:var(--primary-very-light);color:var(--primary-dark);font-size:0.68rem;font-weight:800;cursor:pointer;letter-spacing:0.02em;line-height:1;transition:all 150ms ease;" onmouseover="this.style.background=\'var(--primary-light)\'" onmouseout="this.style.background=\'var(--primary-very-light)\'">COPY</button>';
             }
             function row(label, value, extraStyle) {
                 if (!value) return '';
                 return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border-light);">' +
                     '<div style="min-width:0;">' +
                     '<div style="font-size:0.72rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">' + label + '</div>' +
-                    '<div style="font-weight:900;font-size:0.98rem;color:var(--text);letter-spacing:-0.01em;line-height:1.25;word-break:break-word;">' + escapeHtml(value) + '</div>' +
+                    '<div style="font-weight:900;font-size:0.98rem;color:var(--text);letter-spacing:-0.01em;line-height:1.25;word-break:break-word;">' + esc(value) + '</div>' +
                     '</div>' +
                     copyBtn(value) +
                     '</div>';
@@ -677,7 +678,7 @@
             if (deadline) {
                 html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;">' +
                     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:2px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-                    '<div style="font-size:0.82rem;color:#9A3412;line-height:1.45;font-weight:600;">' + escapeHtml(deadline) + '</div>' +
+                    '<div style="font-size:0.82rem;color:#9A3412;line-height:1.45;font-weight:600;">' + esc(deadline) + '</div>' +
                     '</div>';
             }
             html += '</div></div>';
