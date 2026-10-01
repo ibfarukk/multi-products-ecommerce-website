@@ -217,6 +217,40 @@ function amountsCloseKobo(aKobo, bKobo, tolerance) {
     const d = Math.abs(Number(aKobo||0) - Number(bKobo||0));
     return d <= tol;
 }
+async function markFinalFailedIfNotResolved(env, opts) {
+    // Safety: never mark failed if the ref was already settled as successful.
+    if (!opts || !opts.reference) return { skipped: true, reason: 'missing_ref' };
+    const existing = await getPaymentRecord(env, opts.reference).catch(function() { return null; });
+    const ps = String(existing && existing.paymentStatus ? existing.paymentStatus : '').toLowerCase();
+    const orderSettled = (ps === 'verified' || ps === 'paid' || ps === 'captured' || ps === 'success') || (existing && (existing.verified === true || existing.paid === true));
+    if (orderSettled) return { skipped: true, reason: 'already_verified' };
+    if (opts.retryable === true || isPendingStatus(opts.transaction_status)) {
+        // Transient/pending/409 — never counted as permanent fail, never emailed.
+        return { skipped: true, reason: 'retryable_or_pending' };
+    }
+    // De-dup: don't count the same reference twice on subsequent client retries.
+    let alreadyMarked = false;
+    try {
+        const stats = await getOwnerStats(env);
+        if (stats && Array.isArray(stats.failedReferences)) {
+            alreadyMarked = stats.failedReferences.indexOf(opts.reference) >= 0;
+        }
+    } catch (_e) { alreadyMarked = false; }
+    if (!alreadyMarked) {
+        await updateOwnerStats(env, function(stats) {
+            stats.failedSalesCount += 1;
+            if (!Array.isArray(stats.failedReferences)) stats.failedReferences = [];
+            if (stats.failedReferences.indexOf(opts.reference) < 0) stats.failedReferences.push(opts.reference);
+            while (stats.failedReferences.length > 10000) stats.failedReferences.shift();
+        });
+    }
+    // Send the final-failure notification exactly once for this ref.
+    if (!alreadyMarked && typeof sendOrderNotifications === 'function') {
+        try { await sendOrderNotifications(env, opts.notification); }
+        catch (_nErr) {}
+    }
+    return { counted: !alreadyMarked, skipped: alreadyMarked, reason: alreadyMarked ? 'duplicate_ref' : 'counted_once' };
+}
 
 // ---- Key derivation from LICENCE_CODE ------------------------------
 // Returns a CryptoKey (AES-GCM, extractable=false, encrypt+decrypt)
@@ -1026,6 +1060,21 @@ async function confirmFlutterwavePayment(env, options) {
         return { duplicate: true, warnings: existing.warnings || [] };
     }
 
+    // Rollback guard: if earlier transient fail path (or old code) bumped failedSalesCount
+    // for this exact ref, roll it back — this is the primary "failed→success undo" fix.
+    try {
+        await updateOwnerStats(env, function(stats) {
+            var removed = false;
+            if (Array.isArray(stats.failedReferences) && stats.failedReferences.indexOf(reference) >= 0) {
+                stats.failedReferences = stats.failedReferences.filter(function(r) { return r !== reference; });
+                removed = true;
+            }
+            if (removed && Number(stats.failedSalesCount || 0) > 0) {
+                stats.failedSalesCount = Number(stats.failedSalesCount) - 1;
+            }
+        });
+    } catch (_rbe) {}
+
     const record = {
         reference: reference,
         orderType: 'flutterwave',
@@ -1242,16 +1291,18 @@ async function handleVerifyPayment(request, env) {
                     if (retryable) {
                         return jsonResponse(lastResponse, 409);
                     }
-                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                    await sendOrderNotifications(env, {
-                        event: 'flutterwave_attempt_failed',
-                        title: 'Flutterwave verification failed',
-                        orderRef: reference,
-                        packageId: package_id,
-                        amount: expectedAmount,
-                        currency: expectedCurrency,
-                        customer: customer,
-                        details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                    await markFinalFailedIfNotResolved(env, {
+                        reference: reference, retryable: false,
+                        notification: {
+                            event: 'flutterwave_attempt_failed',
+                            title: 'Flutterwave verification failed',
+                            orderRef: reference,
+                            packageId: package_id,
+                            amount: expectedAmount,
+                            currency: expectedCurrency,
+                            customer: customer,
+                            details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                        }
                     });
                     return jsonResponse(lastResponse || {
                         success: false, error: message, retryable: false, hint: hint || undefined, provider: 'flutterwave'
@@ -1273,49 +1324,55 @@ async function handleVerifyPayment(request, env) {
                 const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
                 const currencyOk = receivedCurrency === expectedCurrency;
                 if (statusOk && !amountOk) {
-                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                    await sendOrderNotifications(env, {
-                        event: 'flutterwave_attempt_failed',
-                        title: 'Flutterwave amount mismatch',
-                        orderRef: reference,
-                        packageId: package_id,
-                        amount: expectedAmount,
-                        currency: expectedCurrency,
-                        customer: customer,
-                        details: [
-                            'Expected: ' + expectedAmount + ' ' + expectedCurrency,
-                            'Received: ' + receivedUnit + ' ' + receivedCurrency
-                        ]
+                    await markFinalFailedIfNotResolved(env, {
+                        reference: reference, retryable: false,
+                        notification: {
+                            event: 'flutterwave_attempt_failed',
+                            title: 'Flutterwave amount mismatch',
+                            orderRef: reference,
+                            packageId: package_id,
+                            amount: expectedAmount,
+                            currency: expectedCurrency,
+                            customer: customer,
+                            details: [
+                                'Expected: ' + expectedAmount + ' ' + expectedCurrency,
+                                'Received: ' + receivedUnit + ' ' + receivedCurrency
+                            ]
+                        }
                     });
                     return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false, provider: 'flutterwave' }, 400);
                 }
                 if (statusOk && !currencyOk) {
-                    await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                    await sendOrderNotifications(env, {
+                    await markFinalFailedIfNotResolved(env, {
+                        reference: reference, retryable: false,
+                        notification: {
+                            event: 'flutterwave_attempt_failed',
+                            title: 'Flutterwave currency mismatch',
+                            orderRef: reference,
+                            packageId: package_id,
+                            amount: expectedAmount,
+                            currency: expectedCurrency,
+                            customer: customer,
+                            details: [
+                                'Expected currency: ' + expectedCurrency,
+                                'Received currency: ' + receivedCurrency
+                            ]
+                        }
+                    });
+                    return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false, provider: 'flutterwave' }, 400);
+                }
+                await markFinalFailedIfNotResolved(env, {
+                    reference: reference, retryable: false, transaction_status: statusStr,
+                    notification: {
                         event: 'flutterwave_attempt_failed',
-                        title: 'Flutterwave currency mismatch',
+                        title: 'Flutterwave payment not completed',
                         orderRef: reference,
                         packageId: package_id,
                         amount: expectedAmount,
                         currency: expectedCurrency,
                         customer: customer,
-                        details: [
-                            'Expected currency: ' + expectedCurrency,
-                            'Received currency: ' + receivedCurrency
-                        ]
-                    });
-                    return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false, provider: 'flutterwave' }, 400);
-                }
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'flutterwave_attempt_failed',
-                    title: 'Flutterwave payment not completed',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: ['Transaction status: ' + statusStr]
+                        details: ['Transaction status: ' + statusStr]
+                    }
                 });
                 return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: statusStr, retryable: false, provider: 'flutterwave' }, 400);
             }
@@ -1470,16 +1527,18 @@ async function handleVerifyPayment(request, env) {
                 if (retryable) {
                     return jsonResponse(lastResponsePs, 409);
                 }
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'paystack_attempt_failed',
-                    title: 'Paystack verification failed',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                await markFinalFailedIfNotResolved(env, {
+                    reference: reference, retryable: false,
+                    notification: {
+                        event: 'paystack_attempt_failed',
+                        title: 'Paystack verification failed',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: ['Reason: ' + message].concat(hint ? ['Hint: ' + hint] : [])
+                    }
                 });
                 return jsonResponse(lastResponsePs || {
                     success: false, error: message, retryable: false, hint: hint || undefined
@@ -1500,49 +1559,55 @@ async function handleVerifyPayment(request, env) {
             const receivedCurrency = String(transaction && transaction.currency ? transaction.currency : '').toUpperCase();
             const currencyOk = receivedCurrency === expectedCurrency;
             if (statusOk && !amountOk) {
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
-                    event: 'paystack_attempt_failed',
-                    title: 'Paystack amount mismatch',
-                    orderRef: reference,
-                    packageId: package_id,
-                    amount: expectedAmount,
-                    currency: expectedCurrency,
-                    customer: customer,
-                    details: [
-                        'Expected: ' + expectedAmount + ' ' + expectedCurrency,
-                        'Received: ' + (receivedKobo / 100) + ' ' + receivedCurrency
-                    ]
+                await markFinalFailedIfNotResolved(env, {
+                    reference: reference, retryable: false,
+                    notification: {
+                        event: 'paystack_attempt_failed',
+                        title: 'Paystack amount mismatch',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: [
+                            'Expected: ' + expectedAmount + ' ' + expectedCurrency,
+                            'Received: ' + (receivedKobo / 100) + ' ' + receivedCurrency
+                        ]
+                    }
                 });
                 return jsonResponse({ success: false, error: 'Amount mismatch', retryable: false }, 400);
             }
             if (statusOk && !currencyOk) {
-                await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-                await sendOrderNotifications(env, {
+                await markFinalFailedIfNotResolved(env, {
+                    reference: reference, retryable: false,
+                    notification: {
+                        event: 'paystack_attempt_failed',
+                        title: 'Paystack currency mismatch',
+                        orderRef: reference,
+                        packageId: package_id,
+                        amount: expectedAmount,
+                        currency: expectedCurrency,
+                        customer: customer,
+                        details: [
+                            'Expected currency: ' + expectedCurrency,
+                            'Received currency: ' + receivedCurrency
+                        ]
+                    }
+                });
+                return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false }, 400);
+            }
+            await markFinalFailedIfNotResolved(env, {
+                reference: reference, retryable: false, transaction_status: statusStr,
+                notification: {
                     event: 'paystack_attempt_failed',
-                    title: 'Paystack currency mismatch',
+                    title: 'Paystack payment not completed',
                     orderRef: reference,
                     packageId: package_id,
                     amount: expectedAmount,
                     currency: expectedCurrency,
                     customer: customer,
-                    details: [
-                        'Expected currency: ' + expectedCurrency,
-                        'Received currency: ' + receivedCurrency
-                    ]
-                });
-                return jsonResponse({ success: false, error: 'Currency mismatch', retryable: false }, 400);
-            }
-            await updateOwnerStats(env, function(stats) { stats.failedSalesCount += 1; });
-            await sendOrderNotifications(env, {
-                event: 'paystack_attempt_failed',
-                title: 'Paystack payment not completed',
-                orderRef: reference,
-                packageId: package_id,
-                amount: expectedAmount,
-                currency: expectedCurrency,
-                customer: customer,
-                details: ['Transaction status: ' + statusStr]
+                    details: ['Transaction status: ' + statusStr]
+                }
             });
             return jsonResponse({ success: false, error: 'Payment is not successful', transaction_status: statusStr, retryable: false }, 400);
         }
@@ -2836,6 +2901,21 @@ async function confirmPaystackPayment(env, options) {
     if (existing && existing.paymentStatus === 'verified') {
         return { duplicate: true, warnings: existing.warnings || [] };
     }
+
+    // Rollback guard: if earlier transient fail path (or old code) bumped failedSalesCount
+    // for this exact ref, roll it back — primary "failed→success undo" fix.
+    try {
+        await updateOwnerStats(env, function(stats) {
+            var removed = false;
+            if (Array.isArray(stats.failedReferences) && stats.failedReferences.indexOf(reference) >= 0) {
+                stats.failedReferences = stats.failedReferences.filter(function(r) { return r !== reference; });
+                removed = true;
+            }
+            if (removed && Number(stats.failedSalesCount || 0) > 0) {
+                stats.failedSalesCount = Number(stats.failedSalesCount) - 1;
+            }
+        });
+    } catch (_rbe) {}
 
     const record = {
         reference: reference,
