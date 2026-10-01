@@ -2632,90 +2632,70 @@ async function getSiteConfigForMode(env, mode) {
 async function getSiteMode(env) {
     const ttlMs = 5 * 60 * 1000;
     const now = Date.now();
-    try {
-        if (siteModeCache.value && now - siteModeCache.loadedAt < ttlMs) {
-            return siteModeCache.value;
-        }
-
-        if (siteModeCache.promise) {
-            return siteModeCache.promise;
-        }
-
-        siteModeCache.promise = (async function() {
+    if (siteModeCache.value && now - siteModeCache.loadedAt < ttlMs) {
+        return siteModeCache.value;
+    }
+    if (siteModeCache.promise) {
+        return siteModeCache.promise;
+    }
+    const fallback = 'singleproduct';
+    siteModeCache.promise = (async function() {
+        let mode = null;
+        try {
+            // Priority 1: site_selector.js KV override (owner's explicit Apply Mode button)
             try {
-                // Priority 1: read the site_selector.js KV override (owner's explicit mode switch)
-                try {
-                    const override = await getStoredSiteSelectorOverride(env);
-                    if (typeof override === 'string' && override.length > 0) {
-                        const cleaned = stripJsComments(override);
-                        const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
-                        const matches = Array.from(String(cleaned || '').matchAll(regex));
-                        const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
-                        const mode = (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct')
-                            ? (raw === 'sigleproduct' ? 'singleproduct' : raw)
-                            : null;
-                        if (mode) {
-                            siteModeCache.value = mode;
-                            siteModeCache.loadedAt = Date.now();
-                            return mode;
-                        }
+                const override = await getStoredSiteSelectorOverride(env);
+                if (typeof override === 'string' && override.length > 0) {
+                    const cleaned = stripJsComments(override);
+                    const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
+                    const matches = Array.from(String(cleaned || '').matchAll(regex));
+                    const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
+                    if (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct') {
+                        mode = raw === 'sigleproduct' ? 'singleproduct' : raw;
                     }
-                } catch (_ss) {}
+                }
+            } catch (_ss) {}
 
-                // Priority 2: use getStoredSiteMode which reads site-config-{mode} WEBSITE_TYPE_SELECT mirrors
+            // Priority 2: site-config-{mode} WEBSITE_TYPE_SELECT mirrors
+            if (!mode) {
                 try {
                     const storedMode = await getStoredSiteMode(env);
                     if (storedMode && (storedMode === 'singleproduct' || storedMode === 'multipleproducts' || storedMode === 'affiliate')) {
-                        siteModeCache.value = storedMode;
-                        siteModeCache.loadedAt = Date.now();
-                        return siteModeCache.value;
+                        mode = storedMode;
                     }
                 } catch (_sm) {}
+            }
 
-                // Priority 3: fall back to raw ASSETS site_selector.js file (hardcoded default: multipleproducts)
-                if (!env.ASSETS || typeof env.ASSETS.fetch !== 'function') {
-                    siteModeCache.value = 'singleproduct';
-                    siteModeCache.loadedAt = Date.now();
-                    return siteModeCache.value;
-                }
-
+            // Priority 3: raw ASSETS site_selector.js file fallback
+            if (!mode && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
                 var response = null;
-                // Try the safest forms supported by Pages ASSETS binding in both
-                // `wrangler pages dev` and deployed Cloudflare Pages runtime.
                 try { response = await env.ASSETS.fetch(new Request('http://localhost/js/site_selector.js')); }
                 catch (e0) { response = null; }
                 if (!response || !response.ok) {
                     try { response = await env.ASSETS.fetch('https://static.invalid/js/site_selector.js'); }
                     catch (e1) { response = null; }
                 }
-                if (!response || !response.ok) {
-                    siteModeCache.value = 'singleproduct';
-                    siteModeCache.loadedAt = Date.now();
-                    return siteModeCache.value;
+                if (response && response.ok) {
+                    var text = '';
+                    try { text = await response.text(); } catch (e2) { text = ''; }
+                    const cleaned = stripJsComments(text);
+                    const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
+                    const matches = Array.from(String(cleaned || '').matchAll(regex));
+                    const raw = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
+                    if (raw === 'multipleproducts' || raw === 'affiliate' || raw === 'singleproduct' || raw === 'sigleproduct') {
+                        mode = raw === 'sigleproduct' ? 'singleproduct' : raw;
+                    }
                 }
-
-                var text = '';
-                try { text = await response.text(); } catch (e2) { text = ''; }
-                const cleaned = stripJsComments(text);
-                const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
-                const matches = Array.from(String(cleaned || '').matchAll(regex));
-                const value = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
-                const mode = (value === 'multipleproducts' || value === 'affiliate' || value === 'singleproduct' || value === 'sigleproduct')
-                    ? (value === 'sigleproduct' ? 'singleproduct' : value)
-                    : 'singleproduct';
-
-                siteModeCache.value = mode;
-                siteModeCache.loadedAt = Date.now();
-                return siteModeCache.value;
-            } catch (err) {
-                return 'singleproduct';
             }
-        })().then(function(v) { siteModeCache.promise = null; return v; }, function(e) { siteModeCache.promise = null; return 'singleproduct'; });
-
-        return siteModeCache.promise;
-    } catch (outerErr) {
-        return 'singleproduct';
-    }
+        } catch (_err) {
+            mode = null;
+        }
+        const finalMode = mode || fallback;
+        siteModeCache.value = finalMode;
+        siteModeCache.loadedAt = Date.now();
+        return finalMode;
+    })().then(function(v) { siteModeCache.promise = null; return v; }, function(e) { siteModeCache.promise = null; return fallback; });
+    return siteModeCache.promise;
 }
 
 async function getEmailContext(env) {
