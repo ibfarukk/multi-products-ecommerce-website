@@ -8,6 +8,16 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/responsive.css">
     <script src="js/site_selector.js"></script>
+    <script>
+        (function() {
+            try {
+                const value = typeof WEBSITE_TYPE_SELECT !== 'undefined' ? String(WEBSITE_TYPE_SELECT).trim().toLowerCase() : 'singleproduct';
+                if (value !== 'multipleproducts') {
+                    window.location.replace('index.html');
+                }
+            } catch (error) {}
+        })();
+    </script>
 </head>
 <body>
     <header class="header">

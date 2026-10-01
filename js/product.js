@@ -795,82 +795,11 @@
     }
 
     // =========================================================
-    // RENDER SEO META & DYNAMIC HEADER ASSETS
-    // =========================================================
-    function renderSEOMeta() {
-        var title = (SEO && SEO.title) ? String(SEO.title) : (String(PRODUCT.shortName || PRODUCT.name || PRODUCT.title || '') + ' | ' + (BUSINESS.name || ''));
-        if (title) document.title = title;
-
-        function setMeta(attr, name, value) {
-            if (!value) return;
-            var el = document.querySelector('meta[' + attr + '="' + name + '"]');
-            if (!el) {
-                el = document.createElement('meta');
-                el.setAttribute(attr, name);
-                document.head.appendChild(el);
-            }
-            el.setAttribute('content', value);
-        }
-
-        setMeta('name', 'description', SEO && SEO.description ? String(SEO.description) : (PRODUCT.subheadline || PRODUCT.description || ''));
-        setMeta('name', 'keywords', SEO && SEO.keywords ? String(SEO.keywords) : (String(PRODUCT.shortName || PRODUCT.name || '').split(' ').join(', ')));
-        setMeta('name', 'twitter:card', 'summary_large_image');
-        setMeta('name', 'twitter:title', title);
-        setMeta('name', 'twitter:description', SEO && SEO.description ? String(SEO.description) : (PRODUCT.subheadline || ''));
-        setMeta('property', 'og:type', 'product');
-        setMeta('property', 'og:title', title);
-        setMeta('property', 'og:description', SEO && SEO.description ? String(SEO.description) : (PRODUCT.subheadline || ''));
-
-        var imgSrc = (PRODUCT && PRODUCT.image) ? String(PRODUCT.image) : (Array.isArray(PRODUCT_IMAGES) && PRODUCT_IMAGES[0] ? String(PRODUCT_IMAGES[0].file || PRODUCT_IMAGES[0]) : '');
-        if (imgSrc) {
-            setMeta('property', 'og:image', imgSrc);
-            setMeta('name', 'twitter:image', imgSrc);
-        }
-
-        var canonical = (SEO && SEO.canonicalUrl) ? String(SEO.canonicalUrl) : (BUSINESS && BUSINESS.website ? String(BUSINESS.website) : (window.location.origin + window.location.pathname));
-        var link = document.querySelector('link[rel="canonical"]');
-        if (canonical) {
-            if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'canonical'); document.head.appendChild(link); }
-            link.setAttribute('href', canonical);
-            setMeta('property', 'og:url', canonical);
-        }
-
-        var faviconSrc = (LOGO && LOGO.type === 'image' && LOGO.image) ? String(LOGO.image) : imgSrc;
-        if (faviconSrc) {
-            var fav = document.querySelector('link[rel="icon"]');
-            if (!fav) { fav = document.createElement('link'); fav.setAttribute('rel', 'icon'); fav.setAttribute('type', 'image/jpeg'); document.head.appendChild(fav); }
-            fav.setAttribute('href', faviconSrc);
-        }
-    }
-
-    function renderHeroWhatsAppCTA() {
-        var whatsappBtns = document.querySelectorAll('.btn-whatsapp, [data-whatsapp-cta]');
-        if (!whatsappBtns || !whatsappBtns.length) return;
-        var waList = Array.isArray(WHATSAPP_NUMBERS) ? WHATSAPP_NUMBERS : [];
-        var primaryWa = waList.find(function(w) { return w.enabled && w.primary; }) || waList.find(function(w) { return w.enabled; }) || waList[0];
-        if (!primaryWa || !primaryWa.number) return;
-        var number = String(primaryWa.number).replace(/\D/g, '');
-        var greeting = 'Hi ' + String(BUSINESS.name || '') + '! I want to order ' + String(PRODUCT.shortName || PRODUCT.name || PRODUCT.title || 'this product');
-        var waUrl = 'https://wa.me/' + number + '?text=' + encodeURIComponent(greeting);
-        whatsappBtns.forEach(function(btn) {
-            if (btn.tagName === 'A') {
-                btn.setAttribute('href', waUrl);
-                btn.setAttribute('target', '_blank');
-                btn.setAttribute('rel', 'noopener noreferrer');
-            } else {
-                btn.addEventListener('click', function() { window.open(waUrl, '_blank', 'noopener'); });
-            }
-        });
-    }
-
-    // =========================================================
     // INITIALIZE
     // =========================================================
     document.addEventListener('DOMContentLoaded', function() {
-        renderSEOMeta();
         renderHeader();
         renderHero();
-        renderHeroWhatsAppCTA();
         renderProductImages();
         renderPackages();
         renderFeatures();

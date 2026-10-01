@@ -2564,7 +2564,7 @@ async function getSiteMode(env) {
         siteModeCache.promise = (async function() {
             try {
                 const storedMode = await getStoredSiteMode(env);
-                if (storedMode && (storedMode === 'singleproduct' || storedMode === 'multipleproducts' || storedMode === 'affiliate')) {
+                if (storedMode && storedMode !== 'singleproduct') {
                     siteModeCache.value = storedMode;
                     siteModeCache.loadedAt = Date.now();
                     return siteModeCache.value;
