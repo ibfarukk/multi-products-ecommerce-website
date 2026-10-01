@@ -96,9 +96,14 @@ export default {
             return handleOwnerImageDelete(request, env);
         }
 
-        // Serve R2 images (public, no auth required)
+        // Serve R2 images via /cdn/ prefix (public, no auth required)
         if (request.method === 'GET' && path.startsWith('/cdn/')) {
             return handleR2ImageServe(request, env, path);
+        }
+        // Serve R2 images via legacy /productsimages/ prefix (public, no auth required)
+        if (request.method === 'GET' && path.startsWith('/productsimages/')) {
+            var rewritten = '/cdn/' + path.substring('/productsimages/'.length);
+            return handleR2ImageServe(request, env, rewritten);
         }
 
         // Public payment / order status lookup
@@ -1636,7 +1641,13 @@ async function handlePublicConfigAsset(request, env, path) {
             primitiveNames.forEach(function(key) {
                 if (override[key] === undefined) return;
                 try {
-                    const value = JSON.stringify(override[key]);
+                    var rawVal = override[key];
+                    // Never inject literal "null" or "undefined" as a string const
+                    if (rawVal === null || rawVal === undefined || (typeof rawVal === 'string' && (rawVal === 'null' || rawVal === 'undefined'))) {
+                        rawVal = key === 'API_BASE_URL' ? '' : rawVal;
+                    }
+                    if (key === 'API_BASE_URL' && !rawVal) rawVal = '';
+                    const value = JSON.stringify(rawVal);
                     const pattern = new RegExp('const\\s+' + key + '\\s*=\\s*[^;]+;?', 'i');
                     text = String(text || '').replace(pattern, 'const ' + key + ' = ' + value + ';');
                 } catch (p) {}
@@ -2544,6 +2555,10 @@ async function getSiteConfigForMode(env, mode) {
     let override = null;
     try { override = await getStoredConfig(env, selectedMode); } catch (_o) { override = null; }
     const merged = Object.assign({}, config, override || {});
+    // Sanitize API_BASE_URL: never inject literal null/undefined — causes String(null) === "null" path bug
+    if (!merged.API_BASE_URL || typeof merged.API_BASE_URL !== 'string' || merged.API_BASE_URL === 'null' || merged.API_BASE_URL === 'undefined') {
+        merged.API_BASE_URL = '';
+    }
     let activeSiteMode = selectedMode;
     try { activeSiteMode = await getStoredSiteMode(env).catch(function() { return selectedMode; }); } catch (_s) { activeSiteMode = selectedMode; }
     if (!merged.WEBSITE_TYPE_SELECT) merged.WEBSITE_TYPE_SELECT = activeSiteMode;

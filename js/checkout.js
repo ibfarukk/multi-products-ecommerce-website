@@ -49,6 +49,236 @@
         return div.innerHTML;
     }
 
+    var paymentModalInjected = false;
+    var paymentModalAutoTimer = null;
+
+    function ensurePaymentModalInjected() {
+        if (paymentModalInjected) return;
+        paymentModalInjected = true;
+
+        var css = [
+            '.pm-overlay{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity 220ms ease,visibility 220ms ease;padding:16px;}',
+            '.pm-overlay.pm-open{opacity:1;visibility:visible;}',
+            '.pm-dialog{width:100%;max-width:480px;background:#ffffff;border-radius:20px;box-shadow:0 30px 80px -20px rgba(15,23,42,0.35),0 10px 30px -10px rgba(15,23,42,0.2);transform:translateY(16px) scale(0.97);transition:transform 240ms cubic-bezier(0.16,1,0.3,1);overflow:hidden;border:1px solid rgba(15,23,42,0.06);}',
+            '.pm-overlay.pm-open .pm-dialog{transform:translateY(0) scale(1);}',
+            '.pm-header{position:relative;padding:22px 24px 10px;}',
+            '.pm-close{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:10px;border:none;background:rgba(15,23,42,0.05);color:#0f172a;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 150ms ease,transform 100ms ease;}',
+            '.pm-close:hover{background:rgba(15,23,42,0.1);}',
+            '.pm-close:active{transform:scale(0.95);}',
+            '.pm-icon-wrap{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;}',
+            '.pm-icon-wrap svg{width:30px;height:30px;}',
+            '.pm-severity-error .pm-icon-wrap{background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%);color:#dc2626;}',
+            '.pm-severity-warning .pm-icon-wrap{background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);color:#b45309;}',
+            '.pm-severity-info .pm-icon-wrap{background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%);color:#1d4ed8;}',
+            '.pm-severity-label{font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;}',
+            '.pm-severity-error .pm-severity-label{color:#dc2626;}',
+            '.pm-severity-warning .pm-severity-label{color:#b45309;}',
+            '.pm-severity-info .pm-severity-label{color:#1d4ed8;}',
+            '.pm-title{font-size:1.2rem;font-weight:700;color:#0f172a;line-height:1.35;margin:0 0 8px;}',
+            '.pm-desc{font-size:0.92rem;color:#475569;line-height:1.55;margin:0;}',
+            '.pm-body{padding:4px 24px 4px;}',
+            '.pm-fields{margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(248,250,252,0.9);border:1px solid rgba(15,23,42,0.06);}',
+            '.pm-fields:empty{display:none;}',
+            '.pm-field-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;font-size:0.86rem;color:#334155;}',
+            '.pm-field-item + .pm-field-item{border-top:1px dashed rgba(15,23,42,0.07);}',
+            '.pm-field-item svg{width:16px;height:16px;flex-shrink:0;margin-top:2px;}',
+            '.pm-severity-error .pm-field-item svg{color:#dc2626;}',
+            '.pm-severity-warning .pm-field-item svg{color:#b45309;}',
+            '.pm-severity-info .pm-field-item svg{color:#1d4ed8;}',
+            '.pm-footer{padding:18px 24px 22px;display:flex;gap:10px;flex-wrap:wrap;}',
+            '.pm-footer .pm-btn-primary{flex:1 1 100%;padding:12px 18px;border-radius:12px;border:none;font-size:0.92rem;font-weight:600;cursor:pointer;transition:transform 100ms ease,box-shadow 150ms ease,filter 150ms ease;color:#fff;}',
+            '.pm-footer .pm-btn-secondary{flex:1 1 48%;padding:11px 16px;border-radius:12px;border:1px solid rgba(15,23,42,0.1);background:#fff;font-size:0.9rem;font-weight:500;color:#0f172a;cursor:pointer;}',
+            '.pm-severity-error .pm-btn-primary{background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);box-shadow:0 8px 20px -8px rgba(220,38,38,0.5);}',
+            '.pm-severity-warning .pm-btn-primary{background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);box-shadow:0 8px 20px -8px rgba(217,119,6,0.5);}',
+            '.pm-severity-info .pm-btn-primary{background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);box-shadow:0 8px 20px -8px rgba(37,99,235,0.5);}',
+            '.pm-footer button:hover{filter:brightness(1.04);}',
+            '.pm-footer button:active{transform:scale(0.985);}',
+            '@media (max-width:480px){.pm-dialog{border-radius:16px;}.pm-header{padding:20px 18px 8px;}.pm-body{padding:4px 18px 4px;}.pm-footer{padding:16px 18px 20px;}.pm-title{font-size:1.1rem;}}'
+        ].join('');
+        var styleEl = document.createElement('style');
+        styleEl.setAttribute('data-payment-modal', '1');
+        styleEl.textContent = css;
+        (document.head || document.getElementsByTagName('head')[0]).appendChild(styleEl);
+
+        var overlay = document.createElement('div');
+        overlay.id = 'pm-modal-overlay';
+        overlay.className = 'pm-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'pm-title');
+        overlay.innerHTML = [
+            '<div class="pm-dialog" id="pm-dialog">',
+            '  <div class="pm-header">',
+            '    <button type="button" class="pm-close" id="pm-close" aria-label="Close">',
+            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+            '    </button>',
+            '    <div class="pm-icon-wrap" id="pm-icon-wrap"></div>',
+            '    <div class="pm-severity-label" id="pm-severity-label"></div>',
+            '    <h3 class="pm-title" id="pm-title"></h3>',
+            '    <p class="pm-desc" id="pm-desc"></p>',
+            '  </div>',
+            '  <div class="pm-body">',
+            '    <div class="pm-fields" id="pm-fields"></div>',
+            '  </div>',
+            '  <div class="pm-footer" id="pm-footer"></div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) hidePaymentError();
+        });
+        overlay.querySelector('#pm-close').addEventListener('click', function() {
+            hidePaymentError();
+        });
+        document.addEventListener('keydown', function pmKeyHandler(e) {
+            if (e.key === 'Escape' && overlay.classList.contains('pm-open')) hidePaymentError();
+        });
+    }
+
+    function friendlyPaymentMessage(rawMsg, severity) {
+        var msg = String(rawMsg || '').trim().toLowerCase();
+        if (!msg) return severity === 'error' ? 'Something went wrong while processing your payment.' : 'Please review your details and try again.';
+        if (msg.indexOf('sdk not loaded') >= 0 || msg.indexOf('paystack sdk') >= 0 || msg.indexOf('flutterwave sdk') >= 0) {
+            return 'We could not load the payment provider. Please check your internet connection and refresh the page.';
+        }
+        if (msg.indexOf('is disabled') >= 0 || msg.indexOf('key not configured') >= 0) {
+            return 'This payment method is currently unavailable. Please choose another option or try again later.';
+        }
+        if (msg.indexOf('paystack_closed') >= 0 || msg.indexOf('flutterwave_closed') >= 0 || msg.indexOf('payment window closed') >= 0) {
+            return 'You closed the payment window before completing the transaction. No charge was made.';
+        }
+        if (msg.indexOf('receipt') >= 0 && msg.indexOf('upload') >= 0) {
+            return 'Please upload your payment receipt before submitting.';
+        }
+        if (msg.indexOf('manual order') >= 0) {
+            return 'We could not submit your payment details. Please confirm your internet connection and try again.';
+        }
+        if (msg.indexOf('verification') >= 0) {
+            return 'We could not verify this payment at this time. Your transaction will be reviewed shortly by our team.';
+        }
+        if (msg.indexOf('unknown online') >= 0) {
+            return 'The selected payment method is not recognized. Please choose another option.';
+        }
+        if (msg.indexOf('missing product') >= 0 || msg.indexOf('product not found') >= 0) {
+            return 'We could not find the product you are trying to purchase. Please return to the store and try again.';
+        }
+        if (msg.indexOf('site configuration') >= 0) {
+            return 'Store configuration is temporarily unavailable. Please refresh the page or try again in a few minutes.';
+        }
+        if (msg.indexOf('name') >= 0 && (msg.indexOf('email') >= 0 || msg.indexOf('phone') >= 0)) {
+            return rawMsg || 'Please fill in your name, email address, and phone number.';
+        }
+        if (msg.indexOf('select a package') >= 0) {
+            return rawMsg || 'Please choose a package before proceeding to payment.';
+        }
+        if (msg.indexOf('delivery address') >= 0) {
+            return rawMsg || 'Please enter your delivery address for physical product shipping.';
+        }
+        return rawMsg;
+    }
+
+    function showPaymentError(options) {
+        try {
+            ensurePaymentModalInjected();
+            var overlay = $('pm-modal-overlay');
+            if (!overlay) return;
+
+            if (paymentModalAutoTimer) {
+                clearTimeout(paymentModalAutoTimer);
+                paymentModalAutoTimer = null;
+            }
+
+            var opts = options || {};
+            var severity = opts.severity === 'warning' || opts.severity === 'info' ? opts.severity : 'error';
+            var title = String(opts.title || (severity === 'error' ? 'We couldn\u2019t complete your payment' : (severity === 'warning' ? 'Please review your details' : 'Heads up')));
+            var description = friendlyPaymentMessage(opts.message || opts.description || '', severity);
+            var fields = Array.isArray(opts.fields) ? opts.fields : [];
+            var actions = Array.isArray(opts.actions) && opts.actions.length ? opts.actions : [
+                { label: opts.ctaLabel || (severity === 'warning' ? 'Fix details' : (severity === 'info' ? 'Got it' : 'Try again')), primary: true }
+            ];
+
+            overlay.className = 'pm-overlay pm-severity-' + severity;
+            // force reflow before adding pm-open
+            void overlay.offsetWidth;
+            overlay.classList.add('pm-open');
+
+            var iconWrap = $('pm-icon-wrap');
+            var svgs = {
+                error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+                warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y1="17"/></svg>',
+                info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+            };
+            if (iconWrap) iconWrap.innerHTML = svgs[severity] || svgs.error;
+
+            var sevLabel = $('pm-severity-label');
+            if (sevLabel) sevLabel.textContent = severity === 'error' ? 'Payment error' : (severity === 'warning' ? 'Action required' : 'Notice');
+            var titleEl = $('pm-title');
+            if (titleEl) titleEl.textContent = title;
+            var descEl = $('pm-desc');
+            if (descEl) descEl.textContent = description;
+
+            var fieldsEl = $('pm-fields');
+            if (fieldsEl) {
+                fieldsEl.innerHTML = '';
+                fields.forEach(function(fieldMsg) {
+                    var item = document.createElement('div');
+                    item.className = 'pm-field-item';
+                    item.innerHTML = (svgs[severity] || svgs.error) + '<span>' + escapeHtml(String(fieldMsg || '')) + '</span>';
+                    fieldsEl.appendChild(item);
+                });
+            }
+
+            var footerEl = $('pm-footer');
+            if (footerEl) {
+                footerEl.innerHTML = '';
+                actions.forEach(function(action, idx) {
+                    if (!action || !action.label) return;
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = action.primary === false ? 'pm-btn-secondary' : 'pm-btn-primary';
+                    btn.textContent = String(action.label);
+                    btn.addEventListener('click', function() {
+                        if (typeof action.onClick === 'function') {
+                            try { action.onClick(); } catch (_e) {}
+                        }
+                        if (action.close !== false) hidePaymentError();
+                    });
+                    footerEl.appendChild(btn);
+                });
+            }
+
+            document.body.style.overflow = 'hidden';
+
+            if (severity !== 'error' && opts.autoDismiss !== false) {
+                var ms = typeof opts.autoDismissMs === 'number' ? opts.autoDismissMs : 10000;
+                paymentModalAutoTimer = setTimeout(hidePaymentError, ms);
+            }
+        } catch (_e) {}
+    }
+
+    function hidePaymentError() {
+        try {
+            var overlay = $('pm-modal-overlay');
+            if (!overlay) return;
+            overlay.classList.remove('pm-open');
+            if (paymentModalAutoTimer) {
+                clearTimeout(paymentModalAutoTimer);
+                paymentModalAutoTimer = null;
+            }
+            setTimeout(function() {
+                try { document.body.style.overflow = ''; } catch (_e) {}
+            }, 260);
+        } catch (_e) {}
+    }
+
+    if (typeof window !== 'undefined') {
+        window.PMELAB_MODAL = {
+            showPaymentError: showPaymentError,
+            hidePaymentError: hidePaymentError
+        };
+    }
+
     function initMobileMenu() {
         const btn = document.querySelector('.mobile-menu-btn');
         const nav = document.querySelector('.mobile-nav');
@@ -76,7 +306,11 @@
 
     function getApiUrl(path) {
         const cleanPath = path.startsWith('/') ? path : '/' + path;
-        const base = typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).trim() : '';
+        var base = '';
+        if (typeof API_BASE_URL !== 'undefined') {
+            base = String(API_BASE_URL == null ? '' : API_BASE_URL).trim();
+            if (base === 'null' || base === 'undefined' || !base) base = '';
+        }
         if (!base) return cleanPath;
         return base.replace(/\/+$/, '') + cleanPath;
     }
@@ -126,6 +360,28 @@
     function toggleManual(show) {
         const manualBox = $('checkout-manual-details');
         if (manualBox) manualBox.classList.toggle('owner-hidden', !show);
+        // Never allow HTML5 required on file inputs that can be hidden —
+        // prevents "invalid form control is not focusable" when browser tries to validate
+        syncReceiptRequiredState(show);
+    }
+
+    function syncReceiptRequiredState(manualActive) {
+        try {
+            var receiptRequired = !!(typeof PAYMENT !== 'undefined' && PAYMENT && PAYMENT.manualReceiptRequired);
+            var inputs = document.querySelectorAll('input[type="file"][name="paymentReceipt"], #paymentReceipt, #checkout-receipt');
+            inputs.forEach(function(inp) {
+                // Strip HTML5 required attribute to avoid "not focusable" error when file input is in a hidden container
+                inp.removeAttribute('required');
+                if (inp.style && typeof inp.style.setProperty === 'function') {
+                    inp.setAttribute('data-receipt-required', receiptRequired && manualActive ? '1' : '0');
+                }
+            });
+            // Apply novalidate to any parent forms so HTML5 validation never runs
+            // (we validate all fields in JS and show our own friendly modal)
+            document.querySelectorAll('form').forEach(function(frm) {
+                if (!frm.hasAttribute('novalidate')) frm.setAttribute('novalidate', 'novalidate');
+            });
+        } catch (_e) {}
     }
 
     function renderManualDetails() {
@@ -425,6 +681,7 @@
         qtyInput.value = String(qtyFromUrl > 0 ? Math.floor(qtyFromUrl) : 1);
 
         showPaymentOptions('checkout-payment-methods-container');
+        syncReceiptRequiredState(false);
 
         function refreshSummary() {
             const pkg = findPackage(product, String(pkgSelect.value || ''));
@@ -453,22 +710,63 @@
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             showError('');
+            syncReceiptRequiredState(getSelectedPaymentMethod(form) === 'manual');
 
             const selection = refreshSummary();
             if (!selection.pkg) {
-                showError('Select a package.');
+                var msgPkg = 'Select a package.';
+                showError(msgPkg);
+                showPaymentError({
+                    severity: 'warning',
+                    title: 'Choose a package first',
+                    message: msgPkg,
+                    fields: ['No package has been selected from the dropdown.'],
+                    ctaLabel: 'Choose a package',
+                    actions: [
+                        { label: 'Choose a package', primary: true, onClick: function() { try { var s = document.getElementById('checkout-package'); if (s) { s.focus(); s.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                        { label: 'Close', primary: false }
+                    ]
+                });
                 return;
             }
 
             const customer = getCustomerInfo();
+            var custFields = [];
+            if (!customer.name) custFields.push('Full name is required.');
+            if (!customer.email) custFields.push('Email address is required.');
+            if (!customer.phone) custFields.push('Phone number is required.');
             if (!customer.name || !customer.email || !customer.phone) {
-                showError('Please fill your name, email, and phone.');
+                var msgCust = 'Please fill your name, email, and phone.';
+                showError(msgCust);
+                showPaymentError({
+                    severity: 'warning',
+                    title: 'Complete your contact details',
+                    message: msgCust,
+                    fields: custFields.length ? custFields : ['Name, email, and phone number must be provided.'],
+                    ctaLabel: 'Fill details',
+                    actions: [
+                        { label: 'Fill details', primary: true, onClick: function() { try { var fn = document.getElementById('checkout-name'); if (fn) { fn.focus(); fn.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                        { label: 'Close', primary: false }
+                    ]
+                });
                 return;
             }
 
             const isPhysical = String(product.productType || '').toLowerCase() !== 'digital';
             if (isPhysical && !customer.address) {
-                showError('Please enter your delivery address.');
+                var msgAddr = 'Please enter your delivery address.';
+                showError(msgAddr);
+                showPaymentError({
+                    severity: 'warning',
+                    title: 'Delivery address is required',
+                    message: msgAddr,
+                    fields: ['Shipping address is required for physical product delivery.'],
+                    ctaLabel: 'Enter address',
+                    actions: [
+                        { label: 'Enter address', primary: true, onClick: function() { try { var adr = document.querySelector('#checkout-address, [name="customer_address"], textarea'); if (adr) { adr.focus(); adr.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                        { label: 'Close', primary: false }
+                    ]
+                });
                 return;
             }
 
@@ -495,7 +793,19 @@
                 const receiptInput = $('checkout-receipt');
                 const receipt = receiptInput && receiptInput.files && receiptInput.files[0] ? receiptInput.files[0] : null;
                 if (typeof PAYMENT !== 'undefined' && PAYMENT && PAYMENT.manualReceiptRequired && !receipt) {
-                    showError('Please upload payment receipt.');
+                    var msgRec = 'Please upload payment receipt.';
+                    showError(msgRec);
+                    showPaymentError({
+                        severity: 'warning',
+                        title: 'Upload your payment receipt',
+                        message: msgRec,
+                        fields: ['A proof-of-payment receipt file is required for manual bank transfers.'],
+                        ctaLabel: 'Upload receipt',
+                        actions: [
+                            { label: 'Upload receipt', primary: true, onClick: function() { try { if (receiptInput) { receiptInput.focus(); receiptInput.click(); receiptInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                            { label: 'Close', primary: false }
+                        ]
+                    });
                     return;
                 }
 
@@ -515,7 +825,19 @@
                         window.location.href = 'success.html?' + extras.join('&');
                     })
                     .catch(function(error) {
-                        showError(error && error.message ? error.message : 'Manual order submission failed.');
+                        var rawMsgMan = error && error.message ? error.message : 'Manual order submission failed.';
+                        showError(rawMsgMan);
+                        showPaymentError({
+                            severity: 'error',
+                            title: 'We couldn\u2019t submit your manual order',
+                            message: rawMsgMan,
+                            fields: ['Please check that your internet connection is stable and try again.', 'If the problem persists, contact support for assistance.'],
+                            ctaLabel: 'Try again',
+                            actions: [
+                                { label: 'Try again', primary: true, onClick: function() { try { form.dispatchEvent(new Event('submit', { cancelable: true })); } catch (_e) {} } },
+                                { label: 'Close', primary: false }
+                            ]
+                        });
                     })
                     .finally(function() {
                         setSubmitting(false);
@@ -543,7 +865,15 @@
                             customer: customer
                         });
                         setSubmitting(false);
-                        showError('Payment window closed.');
+                        var msgClose = 'Payment window closed.';
+                        showError(msgClose);
+                        showPaymentError({
+                            severity: 'info',
+                            title: 'Payment not completed',
+                            message: msgClose,
+                            fields: ['No charge was made to your account.', 'You can restart the checkout process whenever you are ready.'],
+                            ctaLabel: 'Continue shopping'
+                        });
                         return;
                     }
                     const ref = payload.order_ref;
@@ -689,8 +1019,10 @@
                 manualReceiptGroup.style.display = (val === 'manual') ? '' : 'none';
                 var reqSpan = manualReceiptGroup.querySelector('.required');
                 if (reqSpan) reqSpan.style.display = receiptRequired ? '' : 'none';
-                var fileInput = manualReceiptGroup.querySelector('input[type="file"]');
-                if (fileInput) fileInput.required = !!receiptRequired;
+                // Never use HTML5 required on a file input whose parent can be display:none.
+                // This prevents Chrome's "An invalid form control is not focusable" error.
+                // Our own JS submit validation handles the receipt check and shows a friendly modal.
+                syncReceiptRequiredState((val === 'manual'));
             }
         }
         document.querySelectorAll('.payment-methods input[name="payment"]').forEach(function(r) {
@@ -793,9 +1125,28 @@
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             showInlineError('');
+            // Strip HTML5 required from receipt input right before any validation runs
+            syncReceiptRequiredState(getInlinePaymentMethod() === 'manual');
             var customer = getInlineCustomer();
+
+            var inlineCustFields = [];
+            if (!customer.name) inlineCustFields.push('Full name is required.');
+            if (!customer.email) inlineCustFields.push('Email address is required.');
+            if (!customer.phone) inlineCustFields.push('Phone number is required.');
             if (!customer.name || !customer.email || !customer.phone) {
-                showInlineError('Please fill your name, email, and phone.');
+                var inlineMsgCust = 'Please fill your name, email, and phone.';
+                showInlineError(inlineMsgCust);
+                showPaymentError({
+                    severity: 'warning',
+                    title: 'Complete your contact details',
+                    message: inlineMsgCust,
+                    fields: inlineCustFields.length ? inlineCustFields : ['Name, email, and phone number must be provided.'],
+                    ctaLabel: 'Fill details',
+                    actions: [
+                        { label: 'Fill details', primary: true, onClick: function() { try { var fn = document.querySelector('[name="fullName"], [name="customer_name"], #fullName'); if (fn) { fn.focus(); fn.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                        { label: 'Close', primary: false }
+                    ]
+                });
                 return;
             }
             var deliveryAddressRequired = true;
@@ -804,7 +1155,19 @@
                 if (typeof window.PRODUCT !== 'undefined' && window.PRODUCT && String(window.PRODUCT.productType || '').toLowerCase() === 'digital') deliveryAddressRequired = false;
             } catch (err) {}
             if (deliveryAddressRequired && !customer.address) {
-                showInlineError('Please enter your delivery address.');
+                var inlineMsgAddr = 'Please enter your delivery address.';
+                showInlineError(inlineMsgAddr);
+                showPaymentError({
+                    severity: 'warning',
+                    title: 'Delivery address is required',
+                    message: inlineMsgAddr,
+                    fields: ['Shipping address is required for physical product delivery.'],
+                    ctaLabel: 'Enter address',
+                    actions: [
+                        { label: 'Enter address', primary: true, onClick: function() { try { var adr = document.querySelector('[name="address"], [name="customer_address"], #address, textarea'); if (adr) { adr.focus(); adr.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                        { label: 'Close', primary: false }
+                    ]
+                });
                 return;
             }
             var method = getInlinePaymentMethod();
@@ -821,7 +1184,19 @@
                 var receiptInput = document.getElementById('paymentReceipt');
                 var receipt = receiptInput && receiptInput.files && receiptInput.files[0] ? receiptInput.files[0] : null;
                 if (typeof PAYMENT !== 'undefined' && PAYMENT && PAYMENT.manualReceiptRequired && !receipt) {
-                    showInlineError('Please upload payment receipt.');
+                    var inlineMsgRec = 'Please upload payment receipt.';
+                    showInlineError(inlineMsgRec);
+                    showPaymentError({
+                        severity: 'warning',
+                        title: 'Upload your payment receipt',
+                        message: inlineMsgRec,
+                        fields: ['A proof-of-payment receipt file is required for manual bank transfers.'],
+                        ctaLabel: 'Upload receipt',
+                        actions: [
+                            { label: 'Upload receipt', primary: true, onClick: function() { try { if (receiptInput) { receiptInput.focus(); receiptInput.click(); receiptInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (_e) {} } },
+                            { label: 'Close', primary: false }
+                        ]
+                    });
                     return;
                 }
                 setInlineSubmitting(true);
@@ -840,7 +1215,19 @@
                         window.location.href = 'success.html?' + extras.join('&');
                     })
                     .catch(function(error) {
-                        showInlineError(error && error.message ? error.message : 'Manual order submission failed.');
+                        var inlineMsgMan = error && error.message ? error.message : 'Manual order submission failed.';
+                        showInlineError(inlineMsgMan);
+                        showPaymentError({
+                            severity: 'error',
+                            title: 'We couldn\u2019t submit your manual order',
+                            message: inlineMsgMan,
+                            fields: ['Please check that your internet connection is stable and try again.', 'If the problem persists, contact support for assistance.'],
+                            ctaLabel: 'Try again',
+                            actions: [
+                                { label: 'Try again', primary: true, onClick: function() { try { form.dispatchEvent(new Event('submit', { cancelable: true })); } catch (_e) {} } },
+                                { label: 'Close', primary: false }
+                            ]
+                        });
                     })
                     .finally(function() {
                         setInlineSubmitting(false);
@@ -868,7 +1255,15 @@
                             customer: customer
                         });
                         setInlineSubmitting(false);
-                        showInlineError('Payment window closed.');
+                        var inlineMsgClose = 'Payment window closed.';
+                        showInlineError(inlineMsgClose);
+                        showPaymentError({
+                            severity: 'info',
+                            title: 'Payment not completed',
+                            message: inlineMsgClose,
+                            fields: ['No charge was made to your account.', 'You can restart the checkout process whenever you are ready.'],
+                            ctaLabel: 'Continue shopping'
+                        });
                         return;
                     }
                     const ref = payload.order_ref;
@@ -890,6 +1285,9 @@
 
         loader.then(function() {
             injectCssVariables();
+            // Sanitize receipt inputs: strip HTML5 required before any validation can run
+            // so the browser never throws "invalid form control is not focusable"
+            syncReceiptRequiredState(false);
             const mode = getMode();
             updateProductsLinks(mode);
 

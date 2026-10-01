@@ -126,7 +126,11 @@
 
     function getApiUrl(path) {
         const cleanPath = path.startsWith('/') ? path : '/' + path;
-        const base = typeof API_BASE_URL !== 'undefined' ? String(API_BASE_URL).trim() : '';
+        var base = '';
+        if (typeof API_BASE_URL !== 'undefined') {
+            base = String(API_BASE_URL == null ? '' : API_BASE_URL).trim();
+            if (base === 'null' || base === 'undefined' || !base) base = '';
+        }
         if (!base) return cleanPath;
         return base.replace(/\/+$/, '') + cleanPath;
     }
