@@ -146,6 +146,7 @@ export default {
                 // Normalize clean URLs -> canonical .html variants with temporary redirect.
                 // This ensures mode-enforcement runs consistently & no split CDN caches between clean/html URLs.
                 const cleanMap = {
+                    '/singleproduct': '/index.html',
                     '/multiple': '/multiple.html',
                     '/affiliate': '/affiliate.html',
                     '/checkout': '/checkout.html',
@@ -2564,7 +2565,7 @@ async function getSiteMode(env) {
         siteModeCache.promise = (async function() {
             try {
                 const storedMode = await getStoredSiteMode(env);
-                if (storedMode && storedMode !== 'singleproduct') {
+                if (storedMode) {
                     siteModeCache.value = storedMode;
                     siteModeCache.loadedAt = Date.now();
                     return siteModeCache.value;

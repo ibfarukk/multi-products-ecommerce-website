@@ -795,9 +795,116 @@
     }
 
     // =========================================================
+    // RENDER TRUST BADGES STANDALONE STRIP
+    // =========================================================
+    function renderTrustBadgesRow() {
+        const container = document.querySelector('.trust-badges-grid');
+        if (!container || typeof TRUST_BADGES === 'undefined' || !Array.isArray(TRUST_BADGES)) return;
+
+        container.innerHTML = '';
+
+        const iconMap = {
+            'shield': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 12 15 16 10"/>',
+            'shield-check': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 12 15 16 10"/>',
+            'package': '<rect x="16.5" y="3.5" width="7" height="17" rx="1"/><rect x="0.5" y="3.5" width="7" height="17" rx="1"/><path d="M7.5 8.5h9M7.5 12.5h9M7.5 16.5h9"/>',
+            'message-circle': '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+            'smartphone': '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+            'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+            'thumbs-up': '<path d="M7 10v12M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/>',
+            'truck': '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+            'headphones': '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
+            'award': '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>'
+        };
+
+        TRUST_BADGES.forEach(function(item) {
+            const div = document.createElement('div');
+            div.className = 'trust-badge-item';
+            const fallback = '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>';
+            const iconSvg = iconMap[item.icon] || fallback;
+            div.innerHTML = '<div class="trust-badge-icon" style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#ecfdf5 0%,#d1fae5 100%);color:#0f766e;margin:0 auto 8px auto;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + iconSvg + '</svg></div><div style="font-size:0.86rem;font-weight:800;color:#0f172a;text-align:center;letter-spacing:0.01em;">' + escapeHtml(item.text || '') + '</div>';
+            container.appendChild(div);
+        });
+    }
+
+    // =========================================================
+    // RENDER SEO + OPEN GRAPH META TAGS
+    // =========================================================
+    function renderSEO() {
+        if (typeof SEO === 'undefined' || !SEO) return;
+        const setMeta = function(selector, attr, value) {
+            if (!value) return;
+            const el = document.querySelector(selector);
+            if (el) el.setAttribute(attr, value);
+        };
+        const setMetaContentByName = function(name, value) {
+            if (!value) return;
+            const el = document.querySelector('meta[name="' + name + '"]');
+            if (el) el.setAttribute('content', value);
+        };
+        const setMetaContentByProp = function(prop, value) {
+            if (!value) return;
+            const el = document.querySelector('meta[property="' + prop + '"]');
+            if (el) el.setAttribute('content', value);
+        };
+
+        if (SEO.title) { document.title = SEO.title; }
+        setMetaContentByName('description', SEO.description);
+        setMetaContentByName('keywords', SEO.keywords);
+        setMeta('link[rel="canonical"]', 'href', SEO.canonicalUrl);
+
+        setMetaContentByProp('og:title', SEO.title);
+        setMetaContentByProp('og:description', SEO.description);
+        setMetaContentByProp('og:image', SEO.socialImage);
+        setMetaContentByProp('og:url', SEO.canonicalUrl);
+
+        setMetaContentByName('twitter:title', SEO.title);
+        setMetaContentByName('twitter:description', SEO.description);
+        setMetaContentByName('twitter:image', SEO.socialImage);
+    }
+
+    // =========================================================
+    // RENDER FINAL CTA + STICKY CTA
+    // =========================================================
+    function renderFinalAndStickyCTA() {
+        // Final CTA title + subtitle driven by product data
+        const finalTitle = document.querySelector('.final-cta .section-title');
+        const finalSubtitle = document.querySelector('.final-cta .section-subtitle');
+        if (finalTitle && PRODUCT && PRODUCT.shortName) {
+            const headline = PRODUCT.headline || PRODUCT.name || '';
+            finalTitle.textContent = 'READY TO GET YOUR ' + String(PRODUCT.shortName || PRODUCT.name || '').toUpperCase() + '?';
+        }
+        if (finalSubtitle && PRODUCT && PRODUCT.subheadline) {
+            finalSubtitle.textContent = PRODUCT.subheadline;
+        }
+
+        // Sticky CTA name = product short name
+        const stickyName = document.querySelector('.sticky-cta-name');
+        if (stickyName && PRODUCT && PRODUCT.shortName) {
+            stickyName.textContent = PRODUCT.shortName;
+        }
+
+        // Sticky CTA WhatsApp + hero WhatsApp + final CTA WhatsApp hrefs
+        const firstWhatsapp = typeof WHATSAPP_NUMBERS !== 'undefined' && Array.isArray(WHATSAPP_NUMBERS) && WHATSAPP_NUMBERS[0] ? WHATSAPP_NUMBERS[0] : null;
+        if (firstWhatsapp) {
+            const baseUrl = 'https://wa.me/' + String(firstWhatsapp.number || '').replace(/\D/g, '');
+            const query = '?text=' + encodeURIComponent('Hello! I want to order ' + (PRODUCT.shortName || PRODUCT.name || '') + '.');
+            document.querySelectorAll('.btn-whatsapp, .sticky-cta a.btn-whatsapp, .hero-buttons a.btn-whatsapp, .final-cta-buttons a.btn-whatsapp').forEach(function(a) {
+                a.setAttribute('href', baseUrl + query);
+            });
+        }
+
+        // Sticky CTA enabled/disabled flag
+        if (typeof STICKY_CTA !== 'undefined' && STICKY_CTA && STICKY_CTA.enabled === false) {
+            const sticky = document.querySelector('.sticky-cta');
+            if (sticky) sticky.style.display = 'none';
+        }
+    }
+
+    // =========================================================
     // INITIALIZE
     // =========================================================
     document.addEventListener('DOMContentLoaded', function() {
+        renderSEO();
         renderHeader();
         renderHero();
         renderProductImages();
@@ -815,6 +922,8 @@
         renderFooter();
         renderAboutProduct();
         renderTrustBadges();
+        renderTrustBadgesRow();
+        renderFinalAndStickyCTA();
 
         if (typeof window.refreshScrollAnimations === 'function') {
             window.refreshScrollAnimations();
