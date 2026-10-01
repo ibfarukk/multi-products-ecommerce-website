@@ -2834,6 +2834,78 @@
         initLookup();
         initActions();
         initSidebarShell();
+        // ---- LICENCE BANNER (front-end defense-in-depth) ----------
+        // Worker already blocks /owner & /api/owner/* at the edge if
+        // LICENCE_CODE is missing/incorrect (HTTP 402). We ALSO do a
+        // lightweight probe here so any race condition / stale cached
+        // login page surfaces the PMELAB contact banner inline before
+        // sensitive loadConfig renderers run, and physically disables
+        // all buttons/forms below the banner so nothing ships without
+        // valid license regardless of devtools workarounds.
+        (async function _probeLicence() {
+            try {
+                var req = new Request(getApiUrl('/api/owner/licence/status'), {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Basic ' + (getAuthToken() || 'notloggedin')
+                    },
+                    cache: 'no-store'
+                });
+                var r = await fetch(req);
+                if (r.ok) return;
+                var payload = null;
+                try { payload = await r.json(); } catch (_j) { payload = null; }
+                // Already server-blocked at page-load time; if we get here
+                // it's a cached old owner.html. Render blocking banner.
+                var lock = document.createElement('div');
+                lock.id = 'owner-licence-lock';
+                lock.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,rgba(6,78,59,0.96) 0%,rgba(6,95,70,0.96) 45%,rgba(15,118,110,0.96) 100%);backdrop-filter:blur(6px);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#0f172a';
+                var card = document.createElement('div');
+                card.style.cssText = 'width:100%;max-width:720px;background:#fff;border-radius:24px;box-shadow:0 30px 100px rgba(0,0,0,0.35);padding:40px 36px 34px';
+                var tag = '<span style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;box-shadow:inset 0 0 0 1px rgba(185,28,28,0.18)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locked — License Required</span>';
+                var title = '<h1 style="font-size:1.75rem;margin:18px 0 8px;color:#0f172a;line-height:1.2">Access locked by PMELAB TECHNOLOGY LIMITED</h1>';
+                var para = '<p style="margin:0 0 20px;color:#475569;line-height:1.65;font-size:1rem">A valid license key is required to access the owner dashboard. Without it, all product editing, settings, orders, and configuration tools are disabled.</p>';
+                var contact = (payload && payload.contact) ? payload.contact : { website: 'https://paymelab.com', email: 'support@paymelab.com', whatsapp: 'https://wa.me/2347040616209', phone: '+234 704 061 6209', company: 'PMELAB TECHNOLOGY LIMITED' };
+                var gridRows = [
+                    ['Website', '<a href="' + contact.website + '" target="_blank" rel="noopener" style="color:#047857;font-weight:700;text-decoration:none">' + contact.website + '</a>'],
+                    ['Email',   '<a href="mailto:' + contact.email + '" style="color:#047857;font-weight:700;text-decoration:none">' + contact.email + '</a>'],
+                    ['WhatsApp / Call', contact.phone || '+234 704 061 6209'],
+                    ['WhatsApp Chat', '<a href="' + contact.whatsapp + '" target="_blank" rel="noopener" style="color:#047857;font-weight:700;text-decoration:none">' + contact.whatsapp + '</a>'],
+                    ['Company', contact.company || 'PMELAB TECHNOLOGY LIMITED']
+                ];
+                var grid = '<div style="display:grid;grid-template-columns:170px 1fr;gap:12px 16px;padding:20px;background:#f8fafc;border-radius:18px;border:1px solid #e2e8f0">' + gridRows.map(function(r) { return '<div style="font-weight:700;color:#334155">' + r[0] + '</div><div style="color:#0f172a;word-break:break-word">' + r[1] + '</div>'; }).join('') + '</div>';
+                var steps = (payload && payload.nextSteps && Array.isArray(payload.nextSteps))
+                    ? payload.nextSteps.map(function(s) { return '<li style="padding:4px 0;line-height:1.6">' + s + '</li>'; }).join('')
+                    : '<li style="padding:4px 0">Contact PMELAB TECHNOLOGY LIMITED via the channels above to get your license key.</li>' +
+                      '<li style="padding:4px 0">Set <code style="padding:2px 6px;background:#f1f5f9;border-radius:6px;font-size:0.86rem">LICENCE_CODE</code> environment variable in Cloudflare or your .env file.</li>' +
+                      '<li style="padding:4px 0">Re-deploy the Worker and reload this page.</li>';
+                var ol = '<h3 style="margin:22px 0 10px;font-size:1.05rem;color:#0f172a">Next steps</h3><ol style="margin:0 0 16px 20px;padding:0;color:#475569;font-size:0.95rem">' + steps + '</ol>';
+                var buttons = '<div style="display:flex;flex-wrap:wrap;gap:10px">' +
+                    '<a href="' + contact.whatsapp + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;text-decoration:none;transition:transform .12s ease;box-shadow:0 10px 24px rgba(0,0,0,0.14);background:linear-gradient(135deg,#22c55e 0%,#16a34a 50%,#0f766e 100%);color:#fff">💬 Chat WhatsApp</a>' +
+                    '<a href="mailto:' + contact.email + '" style="display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;text-decoration:none;background:#fff;color:#0f172a;box-shadow:inset 0 0 0 1.5px #cbd5e1">✉️ Email Support</a>' +
+                    '<a href="' + contact.website + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;text-decoration:none;background:#fff;color:#0f172a;box-shadow:inset 0 0 0 1.5px #cbd5e1">🌐 Visit paymelab.com</a>' +
+                    '</div>';
+                var foot = '<div style="margin-top:24px;padding-top:18px;border-top:1px dashed #cbd5e1;color:#64748b;font-size:0.85rem;line-height:1.55;text-align:center">© ' + new Date().getFullYear() + ' PMELAB TECHNOLOGY LIMITED · All rights reserved. This panel is locked until a valid license is configured.</div>';
+                card.innerHTML = tag + title + para + grid + ol + buttons + foot;
+                lock.appendChild(card);
+                document.documentElement.appendChild(lock);
+                // Physically disable every interactive element beneath the overlay
+                document.querySelectorAll('button,input,select,textarea,a,form,[contenteditable]').forEach(function(el) {
+                    try {
+                        if (lock.contains(el)) return;
+                        el.setAttribute('disabled', '');
+                        el.setAttribute('aria-disabled', 'true');
+                        el.style.pointerEvents = 'none';
+                        el.style.opacity = '0.5';
+                        el.tabIndex = -1;
+                    } catch (_z) {}
+                });
+                document.querySelectorAll('form').forEach(function(f) {
+                    try { f.addEventListener('submit', function(ev) { ev.stopImmediatePropagation(); ev.preventDefault(); }, true); } catch (_z) {}
+                });
+            } catch (_e) {}
+        })();
+        // ------------------------------------------------------------
         initConfig();
         initSiteModeSelector();
         initModeGate();

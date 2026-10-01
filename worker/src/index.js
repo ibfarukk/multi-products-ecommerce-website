@@ -4,11 +4,193 @@
 
 import { connect } from 'cloudflare:sockets';
 
+// ---- INTERNAL HASHED LICENCE FINGERPRINT ----------------
+// This is NOT a plain licence key. It is a SHA-256 hex digest
+// of the licence string issued by PMELAB TECHNOLOGY LIMITED.
+// Comparing a hash (rather than plaintext) in source code means
+// there is no human-readable licence token anywhere in the repo
+// and the only way to pass the check is to know, or have been
+// issued by PMELAB, the exact matching pre-image string, which
+// then must be set as environment variable LICENCE_CODE at the
+// Cloudflare dashboard / .env / wrangler dev.vars secret level.
+// Source of hash: crypto.createHash('sha256').update(issuee_key)
+const _LIC = [
+    'b63c','544b','4d02','d823','9ca4','fa03','3acf','e293',
+    '5f9e','bff0','7eaf','97e3','3330','b0d3','c56a','b30e',
+    'a'
+].join('') + '' + '';
+
+// ---- LICENCE HELPERS (obscured naming, hidden at top) -----
+async function _digestSHA256(s) {
+    try {
+        const enc = new TextEncoder().encode(String(s || ''));
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('')
+            .toLowerCase();
+    } catch (_e) { return '__'; }
+}
+function _ctEq(a, b) {
+    try {
+        a = String(a || ''); b = String(b || '');
+        if (a.length !== b.length) return false;
+        let d = 0;
+        for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+        return d === 0;
+    } catch (_f) { return false; }
+}
+async function _licOk(env) {
+    try {
+        const u = typeof env !== 'undefined' && env ? String(env.LICENCE_CODE || '') : '';
+        if (!u) return false;
+        const h = await _digestSHA256(u);
+        return _ctEq(h, _LIC);
+    } catch (_g) { return false; }
+}
+function _licGateHtml() {
+    const T = 'License Required — PMELAB TECHNOLOGY LIMITED';
+    const C = 'This website requires a valid license key issued by PMELAB TECHNOLOGY LIMITED to access the owner dashboard.';
+    const Y = 'How to get your license';
+    const Z = [
+        'Website', 'https://paymelab.com',
+        'Email',   'support@paymelab.com',
+        'WhatsApp / Call', '+234 704 061 6209',
+        'WhatsApp Chat', 'https://wa.me/2347040616209',
+        'Company', 'PMELAB TECHNOLOGY LIMITED'
+    ];
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"/>'
+        + '<meta name="viewport" content="width=device-width,initial-scale=1"/>'
+        + '<title>' + T + '</title>'
+        + '<style>'
+        +   '*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#064e3b 0%,#065f46 45%,#0f766e 100%);color:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 20px}'
+        +   '.c{width:100%;max-width:680px;background:#fff;border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,0.28);padding:44px 40px 36px}'
+        +   '.tag{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;box-shadow:inset 0 0 0 1px rgba(185,28,28,0.18)}'
+        +   'h1{font-size:1.9rem;margin:18px 0 10px;color:#0f172a;line-height:1.2}'
+        +   'p.lead{margin:0 0 22px;font-size:1rem;color:#475569;line-height:1.65}'
+        +   '.sep{height:1px;background:#e2e8f0;margin:24px 0}'
+        +   '.grid{display:grid;grid-template-columns:170px 1fr;gap:12px 16px;padding:20px;background:#f8fafc;border-radius:18px;border:1px solid #e2e8f0}'
+        +   '.k{font-weight:700;color:#334155;display:flex;align-items:center;gap:8px}.v{color:#0f172a;word-break:break-word}'
+        +   'a{color:#047857;text-decoration:none;font-weight:600}a:hover{text-decoration:underline}'
+        +   '.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}'
+        +   '.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;border:0;cursor:pointer;text-decoration:none;transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;box-shadow:0 10px 24px rgba(0,0,0,0.14)}'
+        +   '.btn:active{transform:translateY(1px)} .btn:hover{filter:brightness(1.05)}'
+        +   '.btn-p{background:linear-gradient(135deg,#22c55e 0%,#16a34a 50%,#0f766e 100%);color:#fff}'
+        +   '.btn-s{background:#fff;color:#0f172a;box-shadow:inset 0 0 0 1.5px #cbd5e1}'
+        +   '.lock{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;color:#b91c1c;opacity:0.9}'
+        +   '.foot{margin-top:22px;padding-top:18px;border-top:1px dashed #cbd5e1;color:#64748b;font-size:0.85rem;line-height:1.55;text-align:center}'
+        +   '@media (max-width:560px){.c{padding:32px 22px 28px;border-radius:20px}.grid{grid-template-columns:1fr;gap:4px 0}.k{margin-top:8px}}'
+        + '</style></head><body>'
+        + '<main class="c">'
+        +   '<span class="tag"><svg class="lock" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locked Dashboard</span>'
+        +   '<h1>' + T + '</h1>'
+        +   '<p class="lead">' + C + '</p>'
+        +   '<div class="sep"></div>'
+        +   '<h2 style="margin:0 0 12px;font-size:1.1rem;color:#0f172a">' + Y + '</h2>'
+        +   '<div class="grid">'
+        +     '<div class="k">' + Z[0] + '</div><div class="v"><a href="' + Z[1] + '" target="_blank" rel="noopener">' + Z[1] + '</a></div>'
+        +     '<div class="k">' + Z[2] + '</div><div class="v"><a href="mailto:' + Z[3] + '">' + Z[3] + '</a></div>'
+        +     '<div class="k">' + Z[4] + '</div><div class="v">' + Z[5] + '</div>'
+        +     '<div class="k">' + Z[6] + '</div><div class="v"><a href="' + Z[7] + '" target="_blank" rel="noopener">' + Z[7] + '</a></div>'
+        +     '<div class="k">' + Z[8] + '</div><div class="v">' + Z[9] + '</div>'
+        +   '</div>'
+        +   '<div class="row">'
+        +     '<a class="btn btn-p" href="' + Z[7] + '" target="_blank" rel="noopener">'
+        +       '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20.5 3.5A12 12 0 0 0 12 0 12 12 0 0 0 .1 11.9a12 12 0 0 0 1.6 5.9L0 24l6.3-1.7A12 12 0 0 0 12 24h0a12 12 0 0 0 12-12c0-3.2-1.3-6.2-3.5-8.5zm-8.5 18.3c-1.9 0-3.7-.5-5.3-1.5l-.4-.2-3.7 1 1-3.7-.2-.4A10 10 0 1 1 22 12a10 10 0 0 1-10 9.8zm5.4-7.3c-.3-.2-1.8-.9-2-.9-.3-.1-.5-.2-.7.2-.2.4-.8.9-1 1.1-.2.3-.4.3-.7.1-.3-.2-1.3-.5-2.5-1.6-.9-.8-1.5-1.9-1.7-2.2-.2-.3 0-.5.1-.6.1-.1.3-.4.4-.5.1-.2.2-.3.2-.5 0-.2 0-.3-.1-.5-.1-.2-.7-1.7-.9-2.3-.3-.6-.5-.5-.7-.5H4.1c-.2 0-.5.1-.8.4-.3.3-1.1 1.1-1.1 2.7s1.1 3.1 1.3 3.3c.2.2 2.4 3.6 5.8 5.1 4.1 1.8 4.1 1.2 4.8 1.1.8-.2 2.4-1 2.8-1.9.3-.9.4-1.7.3-1.9-.1-.1-.3-.2-.6-.3z"/></svg>'
+        +       'Chat WhatsApp'
+        +     '</a>'
+        +     '<a class="btn btn-s" href="mailto:' + Z[3] + '">'
+        +       '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+        +       'Email Support'
+        +     '</a>'
+        +     '<a class="btn btn-s" href="' + Z[1] + '" target="_blank" rel="noopener">'
+        +       '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
+        +       'Visit paymelab.com'
+        +     '</a>'
+        +   '</div>'
+        +   '<div class="foot">'
+        +     '© ' + new Date().getFullYear() + ' PMELAB TECHNOLOGY LIMITED · All rights reserved.<br/>'
+        +     'Unauthorized access to this panel is prohibited. Your request was logged.'
+        +   '</div>'
+        + '</main></body></html>';
+}
+function _licJson(message) {
+    return JSON.stringify({
+        success: false,
+        error: message || 'Invalid or missing license key.',
+        locked: true,
+        contact: {
+            website: 'https://paymelab.com',
+            email: 'support@paymelab.com',
+            whatsapp: 'https://wa.me/2347040616209',
+            phone: '+234 704 061 6209',
+            company: 'PMELAB TECHNOLOGY LIMITED'
+        },
+        nextSteps: [
+            'Contact PMELAB TECHNOLOGY LIMITED via the channels above to obtain a valid license.',
+            'After you receive your license, set the LICENCE_CODE environment variable in Cloudflare dashboard / .env file.',
+            'Re-deploy (or reload) the Worker so the new LICENCE_CODE secret is picked up.'
+        ]
+    });
+}
+
 export default {
     async fetch(request, env, ctx) {
         try {
         const url = new URL(request.url);
         const path = url.pathname;
+        const method = request.method;
+
+        // ---- LICENCE GATE -------------------------------------------
+        // All owner-dashboard routes are protected BEFORE any other
+        // matching happens. This includes the /owner HTML page AND
+        // every owner-facing API endpoint (/api/owner/*).
+        // If a valid license is not present, return an elegant PMELAB
+        // contact screen instead of unlocking anything.
+        const _ownerPath = path === '/owner'
+            || path === '/owner.html'
+            || path.startsWith('/owner/')
+            || path.startsWith('/api/owner/')
+            || (path === '/api/owner')
+            || (path === '/api/owner/licence/status');
+        if (_ownerPath) {
+            const ok = await _licOk(env);
+            // Public health probe endpoint returns JSON, never HTML,
+            // so the owner dashboard JS client can render its own
+            // contextual banner.
+            if (path === '/api/owner/licence/status') {
+                if (ok) {
+                    return new Response(JSON.stringify({ success: true, licence: 'valid' }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+                    });
+                }
+                return new Response(_licJson('License not configured. Contact PMELAB TECHNOLOGY LIMITED to obtain a license key.'), {
+                    status: 402,
+                    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+                });
+            }
+            if (!ok) {
+                // Return HTML for page loads, JSON for API calls
+                const accept = request.headers.get('Accept') || '';
+                const isApi = path.startsWith('/api/');
+                if (isApi || accept.indexOf('application/json') !== -1) {
+                    return new Response(_licJson('Owner dashboard access denied. License key is missing or invalid. Contact PMELAB TECHNOLOGY LIMITED.'), {
+                        status: 402,
+                        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+                    });
+                }
+                return new Response(_licGateHtml(), {
+                    status: 402,
+                    headers: {
+                        'Content-Type': 'text/html; charset=utf-8',
+                        'Cache-Control': 'no-store, private',
+                        'X-Frame-Options': 'DENY'
+                    }
+                });
+            }
+        }
+        // -------------------------------------------------------------
 
         // CORS headers
         const corsHeaders = {
