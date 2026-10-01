@@ -160,20 +160,26 @@
             const href = 'affiliate-details.html?id=' + encodeURIComponent(String(product.id || ''));
             const priceText = getPriceText(product);
             const specsHtml = getSpecRows(product);
-            const buttonText = String(product.buttonText || 'View Details');
+            const vendorButtonText = String(product.buttonText || 'Buy on Vendor');
             const pid = String(product.id || '');
-            const affUrl = String(product.affiliateUrl || '');
+            const affUrl = String(product.affiliateUrl || '').trim();
+            const useVendorDirect = affUrl && affUrl.length > 0;
+            const primaryHref = useVendorDirect ? affUrl : href;
+            const primaryTarget = useVendorDirect ? 'target="_blank" rel="noopener noreferrer"' : '';
+            const primaryDataAttr = useVendorDirect ? 'data-affiliate-direct-buy="1"' : '';
+            const showViewDetails = useVendorDirect;
             return [
                 '<div class="package-card" style="text-align:left;">',
                 '<div style="border-radius:16px;overflow:hidden;background:var(--surface);margin-bottom:18px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;">',
                 '<img src="' + String(product.image || 'productsimages/logo.jpg') + '" alt="' + String(product.title || product.id) + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy">',
                 '</div>',
-                '<div class="package-title" style="margin:0;text-align:left;font-size:1.35rem;">' + String(product.title || product.id) + '</div>',
+                '<a href="' + href + '" style="color:inherit;text-decoration:none;"><div class="package-title" style="margin:0;text-align:left;font-size:1.35rem;">' + String(product.title || product.id) + '</div></a>',
                 '<div class="package-desc" style="margin-top:10px;margin-bottom:0;text-align:left;">' + String(product.description || '') + '</div>',
                 (priceText ? ('<div style="margin-top:14px;font-weight:900;color:var(--primary);font-size:1.5rem;">' + priceText + '</div>') : ''),
                 specsHtml,
                 '<div style="margin-top:18px;display:grid;gap:10px;">',
-                '<a class="btn btn-primary" href="' + href + '" data-affiliate-card-click="1" data-affiliate-id="' + pid.replace(/"/g, '&quot;') + '" data-affiliate-url="' + affUrl.replace(/"/g, '&quot;') + '" style="width:100%;display:inline-flex;justify-content:center;">' + buttonText + '</a>',
+                (showViewDetails ? ('<a class="btn btn-secondary" href="' + href + '" style="width:100%;display:inline-flex;justify-content:center;">View Details</a>') : ''),
+                '<a class="btn btn-primary" href="' + primaryHref + '" ' + primaryTarget + ' ' + primaryDataAttr + ' data-affiliate-card-click="1" data-affiliate-id="' + pid.replace(/"/g, '&quot;') + '" data-affiliate-url="' + affUrl.replace(/"/g, '&quot;') + '" style="width:100%;display:inline-flex;justify-content:center;">' + vendorButtonText + '</a>',
                 '</div>',
                 '</div>'
             ].join('');
@@ -185,6 +191,7 @@
                 el.addEventListener('click', function(e) {
                     var id = el.getAttribute('data-affiliate-id') || '';
                     var url = el.getAttribute('data-affiliate-url') || '';
+                    // If vendor direct buy, ensure POST survives new tab via keepalive
                     trackAffiliateClick(id, url);
                 });
             });

@@ -154,6 +154,7 @@ export default {
                     '/singleproduct': '/index.html',
                     '/multiple': '/multiple.html',
                     '/affiliate': '/affiliate.html',
+                    '/affiliate-details': '/affiliate-details.html',
                     '/checkout': '/checkout.html',
                     '/cart-checkout': '/cart-checkout.html',
                     '/success': '/success.html',
