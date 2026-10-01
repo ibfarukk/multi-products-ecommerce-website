@@ -695,7 +695,9 @@
         configValues = await fetchConfig(detected);
         if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
         setConfigModeBanner(detected);
+        syncSidebarToStoreMode(detected);
         renderConfig();
+        syncSidebarToStoreMode(detected);
         if (typeof loadProductsManagement === 'function') try { loadProductsManagement(detected); } catch (_e) {}
         setDashboardSubviews('main');
     }
@@ -729,7 +731,9 @@
             // Load filtered content for the chosen mode
             configValues = await fetchConfig(target);
             activeProductsConfig = configValues;
+            syncSidebarToStoreMode(target);
             renderConfig();
+            syncSidebarToStoreMode(target);
             setConfigStatus('');
             if (activeNavTab === 'products') renderProductsList();
             // Refresh stats so dashboard is fresh
@@ -794,10 +798,12 @@
             setView(true);
             setLoginFieldErrorState(false);
             await loadModeGateOrDefault();
+            syncSidebarToStoreMode(configMode);
             try {
                 lastLoadedStats = await fetchStats(token);
                 renderStats(lastLoadedStats);
                 if (typeof renderProductsList === 'function') renderProductsList();
+                syncSidebarToStoreMode(configMode);
             } catch (sErr) { /* non-fatal */ }
         } catch (error) {
             clearAuthToken();
@@ -869,7 +875,9 @@
                 setView(true);
                 setLoginFieldErrorState(false);
                 await loadModeGateOrDefault();
+                syncSidebarToStoreMode(configMode);
                 if (typeof renderProductsList === 'function') renderProductsList();
+                syncSidebarToStoreMode(configMode);
             } catch (error) {
                 setLoginFieldErrorState(true);
                 showError('owner-login-error', error.name === 'AbortError'
@@ -2073,6 +2081,108 @@
         'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
     ];
 
+    var configSectionByMode = {
+        singleproduct: [
+            'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
+            'PRODUCT', 'PRODUCT_TYPE', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS',
+            'SPECIFICATIONS', 'PACKAGES', 'FEATURES', 'ABOUT_PRODUCT', 'HERO_TRUST', 'WHY_CHOOSE',
+            'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
+            'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
+            'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
+            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+        ],
+        multipleproducts: [
+            'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
+            'PRODUCTS', 'PACKAGES', 'FEATURES', 'DELIVERY', 'GUARANTEE', 'TESTIMONIALS', 'FAQ',
+            'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'PAYMENT', 'MANUAL_PAYMENT',
+            'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
+            'SOCIAL_PROOF_GALLERY', 'TRUST_BADGES', 'STICKY_CTA', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+        ],
+        affiliate: [
+            'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
+            'AFFILIATE_PRODUCTS', 'FEATURES', 'TESTIMONIALS', 'FAQ',
+            'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS',
+            'SALES_POPUP', 'PROMOTION', 'TRUST_BADGES', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL'
+        ]
+    };
+
+    function isConfigSectionVisibleForMode(key, mode) {
+        var m = String(mode || configMode || 'multipleproducts').toLowerCase();
+        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate') m = 'multipleproducts';
+        var map = configSectionByMode[m] || configSectionByMode.multipleproducts;
+        if (key === 'WEBSITE_TYPE_SELECT' || key === 'API_BASE_URL') return true;
+        return map.indexOf(key) >= 0;
+    }
+
+    var sidebarMainNavByMode = {
+        singleproduct: ['overview', 'orders', 'products', 'site-selector', 'settings'],
+        multipleproducts: ['overview', 'orders', 'products', 'site-selector', 'settings'],
+        affiliate: ['overview', 'orders', 'products', 'site-selector', 'settings']
+    };
+
+    function syncSidebarToStoreMode(mode) {
+        var m = String(mode || configMode || 'multipleproducts').toLowerCase();
+        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate') m = 'multipleproducts';
+
+        // Settings sublist (already rendered): hide any data-section-jump entries not valid for current mode.
+        var sublist = document.getElementById('owner-sidebar-settings-sub');
+        if (sublist) {
+            sublist.querySelectorAll('[data-section-jump]').forEach(function(link) {
+                var key = link.dataset.sectionJump;
+                var visible = isConfigSectionVisibleForMode(key, m);
+                link.style.display = visible ? '' : 'none';
+                var li = link.parentNode ? link.parentNode : null;
+                if (li && li.tagName === 'LI') li.style.display = visible ? '' : 'none';
+            });
+        }
+
+        // Top-level nav items (data-main-nav-tab): toggle based on current mode map.
+        var mainNavLinks = document.querySelectorAll('.owner-sidebar-list [data-main-nav-tab]');
+        var allowed = sidebarMainNavByMode[m] || sidebarMainNavByMode.multipleproducts;
+        mainNavLinks.forEach(function(link) {
+            var target = String(link.dataset.mainNavTab || '').toLowerCase();
+            if (!target) return;
+            var visible = allowed.indexOf(target) >= 0;
+            link.style.display = visible ? '' : 'none';
+            var li = link.parentNode ? link.parentNode : null;
+            if (li && li.tagName === 'LI') li.style.display = visible ? '' : 'none';
+        });
+
+        // Main tab panels: hide the unused header tab entry (products works for all 3, but keep it visible).
+        // For Settings wrapper: the settings header link should always work (because it returns to All sections).
+        var settingsHeader = document.getElementById('owner-sidebar-settings-header');
+        if (settingsHeader) settingsHeader.style.display = '';
+
+        // Sync config sections rendered in settings panel: hide sections not for this mode (already filtered at render,
+        // but catch any that were injected by previous configMode changes like old tabs)
+        var sectionsHost = document.getElementById('owner-config-sections');
+        if (sectionsHost) {
+            sectionsHost.querySelectorAll('.owner-config-section[data-config-section-key]').forEach(function(sec) {
+                var key = sec.dataset.configSectionKey;
+                sec.style.display = isConfigSectionVisibleForMode(key, m) ? '' : 'none';
+            });
+        }
+
+        // Store Products view tab controls: hide "Add product" for single (already done, just defensive)
+        var addBtn = document.getElementById('owner-add-product-btn');
+        if (addBtn) addBtn.style.display = (m === 'singleproduct') ? 'none' : '';
+
+        // Store Products mode label: refresh with current mode.
+        var modeLabel = document.getElementById('owner-products-mode-label');
+        if (modeLabel) modeLabel.textContent = ({
+            singleproduct: 'Single product storefront',
+            multipleproducts: 'Multi-product storefront',
+            affiliate: 'Affiliate storefront'
+        })[m] || ('Mode: ' + m);
+
+        var modeBannerLabel = document.getElementById('owner-overview-mode-label');
+        if (modeBannerLabel) modeBannerLabel.textContent = ({
+            singleproduct: 'Single Product',
+            multipleproducts: 'Multiple Products',
+            affiliate: 'Affiliate'
+        })[m] || m;
+    }
+
     function configSectionOrderIndex(key) {
         var i = configSectionOrder.indexOf(key);
         return i < 0 ? (configSectionOrder.length + 1000) : i;
@@ -2175,7 +2285,9 @@
         container.innerHTML = '';
         if (sublist) sublist.innerHTML = '';
 
-        var keys = Object.keys(configValues || {}).sort(function(a, b) {
+        var keys = Object.keys(configValues || {}).filter(function(key) {
+            return isConfigSectionVisibleForMode(key, configMode);
+        }).sort(function(a, b) {
             return configSectionOrderIndex(a) - configSectionOrderIndex(b) || String(a).localeCompare(String(b));
         });
 
@@ -2374,7 +2486,7 @@
 
     function reloadConfigSection(sectionKey) {
         if (!sectionKey) {
-            loadConfig(configMode).then(function() { setConfigModeBanner(configMode); });
+            loadConfig(configMode).then(function() { setConfigModeBanner(configMode); syncSidebarToStoreMode(configMode); });
             return;
         }
         setSectionStatus(sectionKey, 'Reloading...', false);
@@ -2382,6 +2494,7 @@
             configValues = latest;
             if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
             renderConfig();
+            syncSidebarToStoreMode(configMode);
             setSectionStatus(sectionKey, 'Reloaded.', false);
             window.setTimeout(function() { setSectionStatus(sectionKey, '', false); }, 2200);
         }).catch(function(error) {
@@ -2409,6 +2522,7 @@
             try { configValues = await fetchConfig(configMode); } catch (_t) {}
             if (configMode === 'singleproduct' && !configValues.WEBSITE_TYPE_SELECT) configValues.WEBSITE_TYPE_SELECT = 'singleproduct';
             renderConfig();
+            syncSidebarToStoreMode(configMode);
             if (sectionKey) {
                 setSectionStatus(sectionKey, 'Saved. Changes are live now.', false);
                 window.setTimeout(function() { setSectionStatus(sectionKey, '', false); }, 3200);
@@ -2572,6 +2686,7 @@
                     var overviewLabel = document.getElementById('owner-overview-mode-label');
                     if (overviewLabel) overviewLabel.textContent = label;
                 }
+                syncSidebarToStoreMode(v);
             } catch (_e) {}
         }
         var oldModeGateApply = document.getElementById('owner-mode-gate-apply');
