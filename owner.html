@@ -1484,6 +1484,20 @@
                 <li><button type="button" class="owner-sidebar-link" data-nav-goto="overview" data-main-nav-tab="overview">
                     <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg> Overview
                 </button></li>
+            </ul>
+            <div class="owner-sidebar-mini-mode" style="margin: 2px 10px 6px;">
+                <label for="owner-sidebar-site-mode">Store Mode</label>
+                <select id="owner-sidebar-site-mode" aria-label="Active website mode">
+                    <option value="singleproduct">Single Product</option>
+                    <option value="multipleproducts">Multiple Products</option>
+                    <option value="affiliate">Affiliate</option>
+                </select>
+                <div class="owner-sidebar-mini-mode-row">
+                    <button type="button" id="owner-sidebar-site-mode-apply" class="btn btn-primary" style="flex: 1 1 100%;">Apply</button>
+                </div>
+                <div class="owner-sidebar-mini-mode-status" id="owner-sidebar-mode-status">Last saved: --</div>
+            </div>
+            <ul class="owner-sidebar-list" data-main-nav>
                 <li><button type="button" class="owner-sidebar-link" data-nav-goto="orders" data-main-nav-tab="orders">
                     <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Orders &amp; Lookup
                 </button></li>
@@ -1528,21 +1542,11 @@
                 </div>
             </div>
 
-            <!-- Sidebar footer: mode selector + quick logout -->
+            <!-- Sidebar footer: quick logout + refresh -->
             <div class="owner-sidebar-footer">
-                <div class="owner-sidebar-mini-mode">
-                    <label for="owner-sidebar-site-mode">Store Mode</label>
-                    <select id="owner-sidebar-site-mode" aria-label="Active website mode">
-                        <option value="singleproduct">Single Product</option>
-                        <option value="multipleproducts">Multiple Products</option>
-                        <option value="affiliate">Affiliate</option>
-                    </select>
-                    <div class="owner-sidebar-mini-mode-row">
-                        <button type="button" id="owner-sidebar-site-mode-apply" class="btn btn-primary">Apply</button>
-                        <button type="button" id="owner-sidebar-logout" class="btn btn-secondary">Logout</button>
-                    </div>
-                    <div class="owner-sidebar-mini-mode-status" id="owner-sidebar-mode-status">Last saved: --</div>
-                    <button type="button" class="btn btn-secondary" id="owner-sidebar-refresh" style="padding:8px 10px;font-size:0.82rem;">Refresh data</button>
+                <div class="owner-sidebar-mini-mode-row">
+                    <button type="button" id="owner-sidebar-logout" class="btn btn-secondary">Logout</button>
+                    <button type="button" class="btn btn-secondary" id="owner-sidebar-refresh">Refresh data</button>
                 </div>
             </div>
         </aside>
