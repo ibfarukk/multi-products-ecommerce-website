@@ -253,21 +253,3 @@ const AFFILIATE_PRODUCTS = [
         buttonText: "Shop Now"
     }
 ];
-
-const PAYMENT = {
-    manualEnabled: true,
-    paystackEnabled: true,
-    paystackPublicKey: "",
-    flutterwaveEnabled: false,
-    flutterwavePublicKey: "",
-    currency: "NGN"
-};
-
-const MANUAL_PAYMENT = {
-    enabled: true,
-    bankName: "First Bank of Nigeria",
-    accountName: "PMELAB TECHNOLOGY LIMITED",
-    accountNumber: "1234567890",
-    instructions: "",
-    paymentDeadline: "Please complete payment within 24 hours to avoid order cancellation."
-};

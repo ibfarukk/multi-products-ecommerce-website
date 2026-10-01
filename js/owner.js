@@ -680,20 +680,14 @@
     }
 
     async function loadModeGateOrDefault() {
-        var detected = null;
+        var detected = 'multipleproducts';
         try {
-            detected = await fetchActiveMode();
-        } catch (_m) { detected = null; }
-        if (!detected) {
-            detected = 'multipleproducts';
-            try {
-                var cfg = await fetchConfig('singleproduct');
-                if (cfg && cfg.WEBSITE_TYPE_SELECT) {
-                    var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
-                    if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
-                }
-            } catch (e) {}
-        }
+            var cfg = await fetchConfig('singleproduct');
+            if (cfg && cfg.WEBSITE_TYPE_SELECT) {
+                var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
+                if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
+            }
+        } catch (e) {}
         activeProductsMode = detected;
         configMode = detected;
         setModeGateCard(detected);
@@ -706,35 +700,23 @@
         setDashboardSubviews('main');
     }
 
-    async function fetchActiveMode() {
-        try {
-            var res = await fetch(getApiUrl('/api/owner/mode'), {
-                headers: { 'Authorization': 'Basic ' + getAuthToken() }
-            });
-            var data = await res.json().catch(function() { return null; });
-            if (res.ok && data && data.success && data.mode) return String(data.mode);
-        } catch (_e) {}
-        return null;
-    }
-
-    async function saveActiveMode(mode) {
-        var res = await fetch(getApiUrl('/api/owner/mode'), {
-            method: 'PUT',
-            headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: String(mode || '').toLowerCase() })
-        });
-        var data = await res.json().catch(function() { return null; });
-        if (!res.ok || !data || !data.success) throw new Error(data && data.error ? data.error : 'Unable to save store mode');
-        return String((data.activeMode || data.mode || mode || '')).toLowerCase();
-    }
-
     async function applyModeGate(mode) {
         var target = String(mode || '').toLowerCase();
         if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
         setModeGateStatus('Applying ' + target + '...');
         try {
-            var applied = await saveActiveMode(target);
-            if (applied) target = applied;
+            // Persist (mirrored to all 3 KV buckets via worker handleOwnerConfigSave)
+            var cfg;
+            try { cfg = await fetchConfig(target); } catch (e) { cfg = {}; }
+            cfg.WEBSITE_TYPE_SELECT = target;
+            var res = await fetch(getApiUrl('/api/owner/config'), {
+                method: 'PUT',
+                headers: { 'Authorization': 'Basic ' + getAuthToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: target, config: cfg })
+            });
+            var data = await res.json().catch(function() { return {}; });
+            if (!res.ok || !data.success) throw new Error(data.error || 'Unable to apply store mode');
+            // Sync every UI selector
             activeProductsMode = target;
             configMode = target;
             setSiteModeSelectValue(target);
@@ -744,11 +726,13 @@
             });
             setSiteModeStatus('Applied ' + target + '. All views filtered to this mode.');
             setModeGateStatus('');
+            // Load filtered content for the chosen mode
             configValues = await fetchConfig(target);
             activeProductsConfig = configValues;
             renderConfig();
             setConfigStatus('');
             if (activeNavTab === 'products') renderProductsList();
+            // Refresh stats so dashboard is fresh
             try {
                 var stats = await fetchStats(getAuthToken());
                 renderStats(stats);
@@ -2080,211 +2064,6 @@
         });
     }
 
-    function copyToClipboardPill(text, btnEl) {
-        if (!btnEl) return;
-        var originalHTML = btnEl.innerHTML;
-        var done = function() {
-            btnEl.innerHTML = 'COPIED &check;';
-            btnEl.classList.add('copied');
-            setTimeout(function() {
-                btnEl.innerHTML = originalHTML;
-                btnEl.classList.remove('copied');
-            }, 1600);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done, function() {
-                var ta = document.createElement('textarea');
-                ta.value = text;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                try { document.execCommand('copy'); done(); } catch (_) {}
-                document.body.removeChild(ta);
-            });
-        } else {
-            var ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); done(); } catch (_) {}
-            document.body.removeChild(ta);
-        }
-    }
-
-    function buildPaymentWebhookCopyCards() {
-        var frag = document.createDocumentFragment();
-        var wrap = document.createElement('div');
-        wrap.style.marginTop = '18px';
-        wrap.className = 'owner-payment-webhook-wrap';
-
-        var intro = document.createElement('div');
-        intro.style.background = 'linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%)';
-        intro.style.border = '1px solid #a7f3d0';
-        intro.style.borderRadius = '10px';
-        intro.style.padding = '12px 14px';
-        intro.style.marginBottom = '14px';
-        intro.style.display = 'flex';
-        intro.style.gap = '10px';
-        intro.style.alignItems = 'flex-start';
-        intro.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>' +
-            '<div style="font-size:0.82rem;color:#065f46;line-height:1.45"><strong style="color:#064e3b">Webhook URLs</strong><br>' +
-            'Copy each URL below into the corresponding provider\'s dashboard (<strong>Paystack</strong>: Settings &rarr; API Keys &amp; Webhooks; <strong>Flutterwave</strong>: Settings &rarr; Webhooks). Leave the page open after saving so that payment events reach your store automatically. Flutterwave also requires you to set a matching Webhook Secret Hash (env <code>FLUTTERWAVE_WEBHOOK_HASH</code>, or it falls back to your Flutterwave Secret Key).</div>';
-        wrap.appendChild(intro);
-
-        var grid = document.createElement('div');
-        grid.style.display = 'grid';
-        grid.style.gap = '14px';
-        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(320px, 1fr))';
-
-        var origin = (window.location && window.location.origin) ? window.location.origin : '';
-        var providers = [
-            {
-                name: 'Paystack',
-                primary: origin + '/api/paystack-webhook',
-                alias: origin + '/api/public/paystack/webhook',
-                accent: '#0ea5e9',
-                accentSoft: '#f0f9ff',
-                icon: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M17 15a2 2 0 0 1-4 0 2 2 0 0 0-4 0 2 2 0 0 1-4 0"/>'
-            },
-            {
-                name: 'Flutterwave',
-                primary: origin + '/api/flutterwave-webhook',
-                alias: origin + '/api/public/flutterwave/webhook',
-                accent: '#f59e0b',
-                accentSoft: '#fffbeb',
-                icon: '<path d="M3 7h13a3 3 0 0 1 3 3v7H6a3 3 0 0 1-3-3V7z"/><path d="M3 7l2-4h12l2 4M7 14h.01M12 14h.01"/>'
-            }
-        ];
-
-        providers.forEach(function(p) {
-            var card = document.createElement('div');
-            card.className = 'owner-card';
-            card.style.borderLeftWidth = '3px';
-            card.style.borderLeftColor = p.accent;
-
-            var cardHead = document.createElement('div');
-            cardHead.style.display = 'flex';
-            cardHead.style.alignItems = 'center';
-            cardHead.style.gap = '10px';
-            cardHead.style.marginBottom = '10px';
-            var pill = document.createElement('span');
-            pill.style.display = 'inline-flex';
-            pill.style.alignItems = 'center';
-            pill.style.gap = '6px';
-            pill.style.padding = '4px 10px';
-            pill.style.borderRadius = '999px';
-            pill.style.background = p.accentSoft;
-            pill.style.color = p.accent;
-            pill.style.fontSize = '0.74rem';
-            pill.style.fontWeight = '800';
-            pill.style.letterSpacing = '0.02em';
-            pill.style.textTransform = 'uppercase';
-            pill.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' + p.icon + '</svg>' + p.name + ' Webhook URL';
-            cardHead.appendChild(pill);
-            card.appendChild(cardHead);
-
-            var label1 = document.createElement('div');
-            label1.className = 'owner-card-label';
-            label1.style.marginTop = '4px';
-            label1.textContent = 'Primary URL (use this)';
-            card.appendChild(label1);
-
-            var row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '8px';
-            row1.style.alignItems = 'stretch';
-            row1.style.marginBottom = '10px';
-            var input1 = document.createElement('input');
-            input1.type = 'text';
-            input1.value = p.primary;
-            input1.readOnly = true;
-            input1.style.flex = '1';
-            input1.style.padding = '9px 11px';
-            input1.style.borderRadius = '8px';
-            input1.style.border = '1px solid var(--border)';
-            input1.style.background = '#f8fafc';
-            input1.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-            input1.style.fontSize = '0.82rem';
-            input1.style.color = '#0f172a';
-            var btn1 = document.createElement('button');
-            btn1.type = 'button';
-            btn1.textContent = 'COPY';
-            btn1.style.padding = '9px 16px';
-            btn1.style.borderRadius = '999px';
-            btn1.style.border = 'none';
-            btn1.style.cursor = 'pointer';
-            btn1.style.background = p.accent;
-            btn1.style.color = '#fff';
-            btn1.style.fontWeight = '800';
-            btn1.style.fontSize = '0.76rem';
-            btn1.style.letterSpacing = '0.03em';
-            btn1.style.transition = 'transform 0.15s ease, background 0.15s ease, color 0.15s ease';
-            btn1.addEventListener('mouseenter', function() { btn1.style.transform = 'translateY(-1px)'; });
-            btn1.addEventListener('mouseleave', function() { btn1.style.transform = 'translateY(0)'; });
-            (function(url, b) {
-                btn1.addEventListener('click', function() { copyToClipboardPill(url, b); });
-            })(p.primary, btn1);
-            row1.appendChild(input1);
-            row1.appendChild(btn1);
-            card.appendChild(row1);
-
-            var label2 = document.createElement('div');
-            label2.className = 'owner-card-label';
-            label2.textContent = 'Alias URL (also accepted)';
-            card.appendChild(label2);
-            var row2 = document.createElement('div');
-            row2.style.display = 'flex';
-            row2.style.gap = '8px';
-            row2.style.alignItems = 'stretch';
-            var input2 = document.createElement('input');
-            input2.type = 'text';
-            input2.value = p.alias;
-            input2.readOnly = true;
-            input2.style.flex = '1';
-            input2.style.padding = '9px 11px';
-            input2.style.borderRadius = '8px';
-            input2.style.border = '1px dashed #cbd5e1';
-            input2.style.background = '#f8fafc';
-            input2.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-            input2.style.fontSize = '0.82rem';
-            input2.style.color = '#475569';
-            var btn2 = document.createElement('button');
-            btn2.type = 'button';
-            btn2.textContent = 'COPY';
-            btn2.style.padding = '9px 16px';
-            btn2.style.borderRadius = '999px';
-            btn2.style.border = '1px solid ' + p.accent;
-            btn2.style.cursor = 'pointer';
-            btn2.style.background = '#fff';
-            btn2.style.color = p.accent;
-            btn2.style.fontWeight = '800';
-            btn2.style.fontSize = '0.76rem';
-            btn2.style.letterSpacing = '0.03em';
-            btn2.style.transition = 'transform 0.15s ease, background 0.15s ease, color 0.15s ease';
-            (function(url, b) {
-                btn2.addEventListener('click', function() { copyToClipboardPill(url, b); });
-            })(p.alias, btn2);
-            row2.appendChild(input2);
-            row2.appendChild(btn2);
-            card.appendChild(row2);
-
-            grid.appendChild(card);
-        });
-
-        var styleEl = document.createElement('style');
-        styleEl.textContent = '' +
-            '.owner-payment-webhook-wrap button.copied { background:#10b981 !important; color:#fff !important; border-color:#10b981 !important; box-shadow:0 4px 10px rgba(16,185,129,0.25) !important; }' +
-            '.owner-payment-webhook-wrap input:focus { outline:none; box-shadow:0 0 0 3px rgba(14,165,233,0.18); border-color:#0ea5e9; }';
-        wrap.appendChild(styleEl);
-        wrap.appendChild(grid);
-
-        frag.appendChild(wrap);
-        return frag;
-    }
-
     var configSectionOrder = [
         'BUSINESS', 'BRAND', 'COMPANY', 'CONTACT', 'STORE_CONTENT',
         'PRODUCT', 'PRODUCT_TYPE', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS', 'PRODUCTS', 'AFFILIATE_PRODUCTS',
@@ -2430,9 +2209,6 @@
             var body = document.createElement('div');
             body.className = 'owner-config-section-body';
             body.appendChild(renderNode(configValues[key], key, ''));
-            if (key === 'PAYMENT') {
-                try { body.appendChild(buildPaymentWebhookCopyCards()); } catch (_e) {}
-            }
 
             // Footer with per-section Save, Reload, status
             var footer = document.createElement('div');

@@ -119,106 +119,20 @@
 
     function toggleManual(show) {
         const manualBox = $('checkout-manual-details');
-        if (!manualBox) return;
-        if (show) {
-            manualBox.classList.add('visible');
-            manualBox.style.display = 'block';
-            manualBox.classList.remove('owner-hidden');
-            try { renderManualDetails(); } catch (_e) {}
-            if (typeof MANUAL_PAYMENT === 'undefined' || !manualBox.innerHTML) {
-                for (var d = 150; d <= 900; d += 250) {
-                    (function(delay) {
-                        setTimeout(function() {
-                            try { renderManualDetails(); } catch (_) {}
-                            var box = $('checkout-manual-details');
-                            if (box && !box.innerHTML) { try { renderManualDetails(); } catch (_) {} }
-                        }, delay);
-                    })(d);
-                }
-            }
-        } else {
-            manualBox.classList.remove('visible');
-            manualBox.style.display = 'none';
-        }
+        if (manualBox) manualBox.classList.toggle('owner-hidden', !show);
     }
 
     function renderManualDetails() {
         if (typeof MANUAL_PAYMENT === 'undefined') return;
-        const manualBox = $('checkout-manual-details');
-        if (!manualBox) return;
-        if (!MANUAL_PAYMENT.enabled) { manualBox.innerHTML = ''; return; }
-        var bank = String(MANUAL_PAYMENT.bankName || '').trim();
-        var name = String(MANUAL_PAYMENT.accountName || '').trim();
-        var number = String(MANUAL_PAYMENT.accountNumber || '').trim();
-        var deadline = String(MANUAL_PAYMENT.paymentDeadline || '').trim();
-        function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-        function copyBtn(val) {
-            if (!val) return '';
-            return '<button type="button" class="manual-copy" data-copy="' + esc(val) + '" title="Copy to clipboard" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--border-light);background:var(--primary-very-light);color:var(--primary-dark);font-size:0.68rem;font-weight:800;cursor:pointer;letter-spacing:0.02em;line-height:1;transition:all 150ms ease;">COPY</button>';
-        }
-        function row(label, value) {
-            if (!value) return '';
-            return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border-light);">' +
-                '<div style="min-width:0;">' +
-                '<div style="font-size:0.72rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">' + label + '</div>' +
-                '<div style="font-weight:900;font-size:0.98rem;color:var(--text);letter-spacing:-0.01em;line-height:1.25;word-break:break-word;">' + esc(value) + '</div>' +
-                '</div>' + copyBtn(value) + '</div>';
-        }
-        var html = '';
-        html += '<div style="border-radius:14px;border:1px solid var(--border);background:linear-gradient(180deg, rgba(220,252,231,0.5) 0%, #FFFFFF 52%);overflow:hidden;">';
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg, var(--primary), var(--primary-dark));color:var(--white);">' +
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 11h20"/><path d="M6 16h4"/></svg>' +
-            '<div style="display:flex;flex-direction:column;gap:2px;">' +
-            '<div style="font-size:0.78rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;opacity:0.9;">Bank Transfer Details</div>' +
-            '<div style="font-size:0.88rem;font-weight:700;opacity:0.98;">Please pay exactly the order total shown above</div>' +
-            '</div></div>';
-        html += '<div style="padding:14px 16px;display:grid;gap:8px;">';
-        html += row('Bank Name', bank);
-        html += row('Account Name', name);
-        html += row('Account Number', number);
-        if (deadline) {
-            html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;">' +
-                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:2px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-                '<div style="font-size:0.82rem;color:#9A3412;line-height:1.45;font-weight:600;">' + esc(deadline) + '</div>' +
-                '</div>';
-        }
-        html += '</div></div>';
-        manualBox.innerHTML = html;
-        manualBox.querySelectorAll('.manual-copy').forEach(function(btn) {
-            btn.addEventListener('click', function(ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
-                var text = btn.getAttribute('data-copy') || '';
-                var done = function() {
-                    var orig = btn.textContent;
-                    btn.textContent = 'COPIED ✓';
-                    btn.style.background = 'var(--primary)';
-                    btn.style.color = '#fff';
-                    btn.style.borderColor = 'var(--primary-dark)';
-                    setTimeout(function() {
-                        btn.textContent = orig;
-                        btn.style.background = '';
-                        btn.style.color = '';
-                        btn.style.borderColor = '';
-                    }, 1600);
-                };
-                try {
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(text).then(done).catch(function() {
-                            var ta = document.createElement('textarea');
-                            ta.value = text; document.body.appendChild(ta); ta.select();
-                            try { document.execCommand('copy'); } catch (e) {}
-                            document.body.removeChild(ta); done();
-                        });
-                    } else {
-                        var ta = document.createElement('textarea');
-                        ta.value = text; document.body.appendChild(ta); ta.select();
-                        try { document.execCommand('copy'); } catch (e) {}
-                        document.body.removeChild(ta); done();
-                    }
-                } catch (e) { done(); }
-            });
-        });
+        const bank = $('checkout-manual-bank');
+        const name = $('checkout-manual-account-name');
+        const number = $('checkout-manual-account-number');
+        const deadline = $('checkout-manual-deadline');
+
+        if (bank) bank.textContent = MANUAL_PAYMENT.bankName || '';
+        if (name) name.textContent = MANUAL_PAYMENT.accountName || '';
+        if (number) number.textContent = MANUAL_PAYMENT.accountNumber || '';
+        if (deadline) deadline.textContent = MANUAL_PAYMENT.paymentDeadline || '';
     }
 
     function getSelectedPaymentMethod(form) {
@@ -643,81 +557,15 @@
         var manualReceiptGroup = document.getElementById('manual-receipt-group');
         function renderManualBankDetailsInline() {
             if (!manualInfo || typeof MANUAL_PAYMENT === 'undefined') return;
-            if (!MANUAL_PAYMENT.enabled) { manualInfo.innerHTML = ''; return; }
-            var bank = String(MANUAL_PAYMENT.bankName || '').trim();
-            var name = String(MANUAL_PAYMENT.accountName || '').trim();
-            var number = String(MANUAL_PAYMENT.accountNumber || '').trim();
-            var deadline = String(MANUAL_PAYMENT.paymentDeadline || '').trim();
-            function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-            function copyBtn(val) {
-                if (!val) return '';
-                return '<button type="button" class="manual-copy" data-copy="' + esc(val) + '" title="Copy to clipboard" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--border-light);background:var(--primary-very-light);color:var(--primary-dark);font-size:0.68rem;font-weight:800;cursor:pointer;letter-spacing:0.02em;line-height:1;transition:all 150ms ease;" onmouseover="this.style.background=\'var(--primary-light)\'" onmouseout="this.style.background=\'var(--primary-very-light)\'">COPY</button>';
-            }
-            function row(label, value, extraStyle) {
-                if (!value) return '';
-                return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border-light);">' +
-                    '<div style="min-width:0;">' +
-                    '<div style="font-size:0.72rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">' + label + '</div>' +
-                    '<div style="font-weight:900;font-size:0.98rem;color:var(--text);letter-spacing:-0.01em;line-height:1.25;word-break:break-word;">' + esc(value) + '</div>' +
-                    '</div>' +
-                    copyBtn(value) +
-                    '</div>';
-            }
-            var html = '';
-            html += '<div class="manual-bank-card" style="margin-top:8px;margin-bottom:14px;border-radius:14px;border:1px solid var(--border);background:linear-gradient(180deg, rgba(220,252,231,0.5) 0%, #FFFFFF 52%);overflow:hidden;">';
-            html += '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg, var(--primary), var(--primary-dark));color:var(--white);">' +
-                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 11h20"/><path d="M6 16h4"/></svg>' +
-                '<div style="display:flex;flex-direction:column;gap:2px;">' +
-                '<div style="font-size:0.78rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;opacity:0.9;">Bank Transfer Details</div>' +
-                '<div style="font-size:0.88rem;font-weight:700;opacity:0.98;">Please pay exactly the order total below</div>' +
-                '</div></div>';
-            html += '<div style="padding:14px 16px;display:grid;gap:8px;">';
-            html += row('Bank Name', bank);
-            html += row('Account Name', name);
-            html += row('Account Number', number);
-            if (deadline) {
-                html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;">' +
-                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:2px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-                    '<div style="font-size:0.82rem;color:#9A3412;line-height:1.45;font-weight:600;">' + esc(deadline) + '</div>' +
-                    '</div>';
-            }
-            html += '</div></div>';
-            manualInfo.innerHTML = html;
-            manualInfo.querySelectorAll('.manual-copy').forEach(function(btn) {
-                btn.addEventListener('click', function(ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    var text = btn.getAttribute('data-copy') || '';
-                    var done = function() {
-                        var orig = btn.textContent;
-                        btn.textContent = 'COPIED ✓';
-                        btn.style.background = 'var(--primary)';
-                        btn.style.color = '#fff';
-                        btn.style.borderColor = 'var(--primary-dark)';
-                        setTimeout(function() {
-                            btn.textContent = orig;
-                            btn.style.background = '';
-                            btn.style.color = '';
-                            btn.style.borderColor = '';
-                        }, 1600);
-                    };
-                    try {
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(text).then(done).catch(function() {
-                                var ta = document.createElement('textarea');
-                                ta.value = text; document.body.appendChild(ta); ta.select();
-                                try { document.execCommand('copy'); } catch (e) {}
-                                document.body.removeChild(ta); done();
-                            });
-                        } else {
-                            var ta = document.createElement('textarea');
-                            ta.value = text; document.body.appendChild(ta); ta.select();
-                            try { document.execCommand('copy'); } catch (e) {}
-                            document.body.removeChild(ta); done();
-                        }
-                    } catch (e) { done(); }
-                });
-            });
+            manualInfo.innerHTML = MANUAL_PAYMENT.enabled ?
+                ('<div style="border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff;margin-top:10px;">' +
+                    '<div style="font-weight:800;margin-bottom:6px;">Bank Details</div>' +
+                    '<div style="display:grid;gap:4px;font-size:0.95rem;">' +
+                    '<div><span style="color:var(--muted);">Bank:</span> ' + (MANUAL_PAYMENT.bankName || '') + '</div>' +
+                    '<div><span style="color:var(--muted);">Account Name:</span> ' + (MANUAL_PAYMENT.accountName || '') + '</div>' +
+                    '<div><span style="color:var(--muted);">Account Number:</span> ' + (MANUAL_PAYMENT.accountNumber || '') + '</div>' +
+                    (MANUAL_PAYMENT.paymentDeadline ? '<div style="color:var(--muted);margin-top:6px;">' + MANUAL_PAYMENT.paymentDeadline + '</div>' : '') +
+                    '</div></div>') : '';
         }
         function updateSelectedMethodCard() {
             var selected = document.querySelector('.payment-methods input[name="payment"]:checked');
@@ -725,27 +573,8 @@
             document.querySelectorAll('.payment-methods .payment-method').forEach(function(el) { el.classList.remove('selected'); });
             var card = selected && selected.closest ? selected.closest('.payment-method') : null;
             if (card) card.classList.add('selected');
-            var isManual = val === 'manual';
-            if (manualInfo) {
-                manualInfo.classList.toggle('visible', isManual);
-                if (isManual) {
-                    manualInfo.style.display = 'block';
-                    try { renderManualBankDetailsInline(); } catch (_e) {}
-                    if (typeof MANUAL_PAYMENT === 'undefined' || !manualInfo.innerHTML) {
-                        for (var d = 150; d <= 900; d += 250) {
-                            (function(delay) {
-                                setTimeout(function() {
-                                    try { renderManualBankDetailsInline(); } catch (_) {}
-                                    if (manualInfo && !manualInfo.innerHTML) { try { renderManualBankDetailsInline(); } catch (_) {} }
-                                }, delay);
-                            })(d);
-                        }
-                    }
-                } else {
-                    manualInfo.style.display = 'none';
-                }
-            }
-            if (manualReceiptGroup) manualReceiptGroup.style.display = isManual ? '' : 'none';
+            if (manualInfo) manualInfo.style.display = (val === 'manual') ? '' : 'none';
+            if (manualReceiptGroup) manualReceiptGroup.style.display = (val === 'manual') ? '' : 'none';
         }
         document.querySelectorAll('.payment-methods input[name="payment"]').forEach(function(r) {
             r.addEventListener('change', updateSelectedMethodCard);
