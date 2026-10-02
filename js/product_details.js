@@ -334,7 +334,7 @@
             const cta = $('details-affiliate-cta');
             const priceEl = $('details-affiliate-price');
             const link = String(product.affiliateUrl || '').trim();
-            const buttonText = String(product.buttonText || 'Visit Vendor');
+            const buttonText = 'View Details';
             if (cta) {
                 cta.textContent = buttonText;
                 cta.href = link || '#';

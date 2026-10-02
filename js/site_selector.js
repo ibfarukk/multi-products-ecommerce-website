@@ -15,9 +15,9 @@ Available modes:
 =========================================================
 */
 
-const WEBSITE_TYPE_SELECT = "singleproduct";
+//const WEBSITE_TYPE_SELECT = "singleproduct";
 //const WEBSITE_TYPE_SELECT = "multipleproducts";
-//const WEBSITE_TYPE_SELECT = "affiliate";
+const WEBSITE_TYPE_SELECT = "affiliate";
 
 /*
 =========================================================
