@@ -724,7 +724,7 @@ export default {
                 let response = await safeAssetsFetch(request, env, path);
                 if (response) return response;
                 // safeAssetsFetch returned null: direct ASSETS fetch last attempt
-                return env.ASSETS.fetch(request).then(function(r) { return withNoStoreCache(r, path); }).catch(function(fallbackErr) {
+                return env.ASSETS.fetch(request).then(function(r) { return applyCachePolicy(r, path); }).catch(function(fallbackErr) {
                     return new Response(JSON.stringify({ error: 'Service Unavailable', detail: fallbackErr && fallbackErr.message ? fallbackErr.message : 'asset fetch failed' }), {
                         status: 503,
                         headers: { 'Content-Type': 'application/json; charset=utf-8' }
@@ -2304,22 +2304,22 @@ async function handlePublicConfigAsset(request, env, path) {
                 text = await response.text();
                 sourceAsset = 'assets';
             } catch (assetsErr) {
-                // Worst-case: return empty JS with no-store so browser retries next load.
-                return new Response('// config fetch failed; serving empty placeholder\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store, private, no-cache, must-revalidate' } });
+                // Worst-case: return empty JS with short TTL so browser retries next load quickly
+                return new Response('// config fetch failed; serving empty placeholder\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'private, max-age=10, stale-while-revalidate=30' } });
             }
         }
         if (path === '/js/site_selector.js') {
             let activeMode = 'singleproduct';
             try { activeMode = await getSiteMode(env); } catch (sm) { activeMode = 'singleproduct'; }
             const source = String(text || '').replace(/const\s+WEBSITE_TYPE_SELECT\s*=\s*["'][^"']*["']\s*;?/i, 'const WEBSITE_TYPE_SELECT = "' + activeMode + '";');
-            return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
+            return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'private, max-age=10, stale-while-revalidate=60' } });
         }
 
         const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
         let override = null;
         try { override = await getStoredConfig(env, mode); } catch (sc) { override = null; }
         const contentType = 'application/javascript';
-        const noStoreHeaders = { 'Content-Type': contentType, 'Cache-Control': 'no-store, private, no-cache, must-revalidate' };
+        const cacheHeaders = { 'Content-Type': contentType, 'Cache-Control': 'private, max-age=10, stale-while-revalidate=60' };
         if (override) {
             const primitiveNames = ['API_BASE_URL', 'PRODUCT_TYPE'];
             primitiveNames.forEach(function(key) {
@@ -2349,14 +2349,14 @@ async function handlePublicConfigAsset(request, env, path) {
                 }).map(function(key) {
                     return 'if (typeof ' + key + ' !== "undefined") { var __value = ' + JSON.stringify(override[key]) + '; if (Array.isArray(' + key + ') && Array.isArray(__value)) { ' + key + '.splice(0, ' + key + '.length); __value.forEach(function(item) { ' + key + '.push(item); }); } else if (typeof ' + key + ' === "object" && ' + key + ' && __value && !Array.isArray(__value)) { Object.assign(' + key + ', __value); } }';
                 }).join('\n');
-                return new Response(String(text || '') + '\n' + assignments, { headers: noStoreHeaders });
+                return new Response(String(text || '') + '\n' + assignments, { headers: cacheHeaders });
             } catch (asgErr) {
-                return new Response(text, { headers: noStoreHeaders });
+                return new Response(text, { headers: cacheHeaders });
             }
         }
-        // No override stored yet: return the static content with no-store so subsequent overrides immediately propagate (no stale CDN copies).
+        // No override stored yet: return the static content with a short TTL.
         try {
-            return new Response(text, { headers: noStoreHeaders });
+            return new Response(text, { headers: cacheHeaders });
         } catch (e) {
             return new Response(text, { headers: { 'Content-Type': contentType } });
         }
@@ -2366,7 +2366,7 @@ async function handlePublicConfigAsset(request, env, path) {
         try {
             if (env.ASSETS && typeof env.ASSETS.fetch === 'function') return env.ASSETS.fetch(request);
         } catch (_) {}
-        return new Response('// fatal config-asset error\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' } });
+        return new Response('// fatal config-asset error\n', { status: 200, headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'private, max-age=10, stale-while-revalidate=30' } });
     }
 }
 
@@ -4438,52 +4438,77 @@ function jsonResponse(data, status = 200) {
     });
 }
 
-function shouldBustBrowserCache(pathname, contentType) {
+function resolveCachePolicy(pathname, contentType) {
     const cleanPath = String(pathname || '').split('?')[0].split('#')[0];
-    if (!cleanPath || cleanPath === '/') return true;
     const lower = cleanPath.toLowerCase();
-    if (lower.endsWith('.html')) return true;
-    if (lower.endsWith('.htm')) return true;
-    if (lower.startsWith('/js/') && lower.endsWith('.js')) return true;
-    if (lower.startsWith('/css/') && lower.endsWith('.css')) return true;
-    // Clean storefront URLs (no extension):
-    const cleanStoreUrls = ['/multiple', '/affiliate', '/checkout', '/cart-checkout', '/success', '/payment-failed', '/product-details', '/owner'];
-    if (cleanStoreUrls.indexOf(lower) >= 0) return true;
-    // Fallback: inspect Content-Type when path extension is missing
     const ct = String(contentType || '').toLowerCase();
-    if (ct.indexOf('text/html') >= 0) return true;
-    if (ct.indexOf('javascript') >= 0 || ct.indexOf('application/js') >= 0) return true;
-    if (ct.indexOf('css') >= 0) return true;
-    return false;
+    // Owner dashboard licence/auth & JSON API probes are sensitive & dynamic — no-store.
+    if (lower.startsWith('/api/owner/')) return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
+    if (lower === '/api/owner/licence/status') return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
+    // Worker-injected dynamic JS: changes when owner edits Template Settings.
+    if (lower === '/js/config.js' || lower === '/js/config2.js' || lower === '/js/config3.js' || lower === '/js/site_selector.js') {
+        return { cc: 'private, max-age=10, stale-while-revalidate=60' };
+    }
+    // Static JS files (owner.js, checkout.js, product_details.js, multiple.js, affiliate.js, etc.)
+    if (lower.startsWith('/js/') && lower.endsWith('.js')) {
+        return { cc: 'public, max-age=31536000, immutable' };
+    }
+    // Static stylesheets
+    if (lower.startsWith('/css/') && lower.endsWith('.css')) {
+        return { cc: 'public, max-age=31536000, immutable' };
+    }
+    // Product images, banners, icons, fonts — R2 & uploads + favicon(s)
+    if (lower.startsWith('/cdn/') || lower.startsWith('/productsimages/') || lower.startsWith('/images/') ||
+        lower.startsWith('/img/') || lower.startsWith('/assets/') || lower.startsWith('/icons/') ||
+        lower.startsWith('/fonts/') || lower === '/favicon.ico' || lower.endsWith('.png') || lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') || lower.endsWith('.webp') || lower.endsWith('.svg') || lower.endsWith('.gif') ||
+        lower.endsWith('.ico') || lower.endsWith('.woff') || lower.endsWith('.woff2') || lower.endsWith('.ttf')) {
+        return { cc: 'public, max-age=31536000, immutable' };
+    }
+    // Any API (non-owner) — paystack/flutterwave verify, payment status, etc.
+    if (lower.startsWith('/api/')) return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
+    // Clean storefront URLs & HTML documents: serve stale instantly, revalidate in bg for 1 day.
+    const cleanStoreUrls = ['/', '/multiple', '/affiliate', '/checkout', '/cart-checkout', '/success',
+                            '/payment-failed', '/product-details', '/affiliate-details', '/owner'];
+    if (cleanStoreUrls.indexOf(lower) >= 0 || lower.endsWith('.html') || lower.endsWith('.htm') ||
+        ct.indexOf('text/html') >= 0) {
+        return { cc: 'private, max-age=60, s-maxage=300, stale-while-revalidate=86400' };
+    }
+    // CSS/JS by content-type fallback if path was ambiguous
+    if (ct.indexOf('javascript') >= 0 || ct.indexOf('application/js') >= 0) {
+        return { cc: 'public, max-age=31536000, immutable' };
+    }
+    if (ct.indexOf('text/css') >= 0) return { cc: 'public, max-age=31536000, immutable' };
+    if (ct.indexOf('image/') >= 0 || ct.indexOf('font/') >= 0) return { cc: 'public, max-age=31536000, immutable' };
+    // Conservative safe default — short TTL stale-while-revalidate, never no-store for assets.
+    return { cc: 'public, max-age=300, stale-while-revalidate=3600' };
 }
 
-function withNoStoreCache(response, pathname) {
+function applyCachePolicy(response, pathname) {
     if (!response) return response;
     try {
         const status = response.status;
-        const url = response.url || '';
         const ctHdr = response.headers ? response.headers.get('Content-Type') : '';
-        if (!shouldBustBrowserCache(pathname || '', ctHdr)) {
-            return response;
-        }
-        // Preserve existing headers but stamp over cache directives.
-        // Also disable Vary splitting issues & declare Expires 0 for legacy clients.
+        const policy = resolveCachePolicy(pathname || '', ctHdr);
         const newHeaders = new Headers(response.headers);
-        newHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0, s-maxage=0, proxy-revalidate, immutable=false');
-        newHeaders.set('Pragma', 'no-cache');
-        newHeaders.set('Expires', '0');
-        newHeaders.set('Clear-Site-Data', '"cache", "executionContexts"');
-        // If original response didn't declare a charset, add one for HTML/JS to prevent edge misrenders
+        newHeaders.set('Cache-Control', policy.cc);
+        if (policy.pragma) newHeaders.set('Pragma', policy.pragma);
+        if (policy.expires) newHeaders.set('Expires', policy.expires);
+        // NEVER emit Clear-Site-Data — it wipes the entire browser cache for this origin on every response.
+        newHeaders.delete('Clear-Site-Data');
+        // Ensure charset is declared so browsers don't mis-render.
         const existingCT = newHeaders.get('Content-Type') || ctHdr || '';
-        if (existingCT && existingCT.indexOf('text/html') >= 0 && existingCT.indexOf('charset') < 0) {
-            newHeaders.set('Content-Type', existingCT + '; charset=utf-8');
-        }
-        if (existingCT && existingCT.indexOf('javascript') >= 0 && existingCT.indexOf('charset') < 0) {
-            newHeaders.set('Content-Type', 'application/javascript; charset=utf-8');
+        if (existingCT) {
+            if (existingCT.indexOf('text/html') >= 0 && existingCT.indexOf('charset') < 0) {
+                newHeaders.set('Content-Type', existingCT + '; charset=utf-8');
+            }
+            if ((existingCT.indexOf('javascript') >= 0 || existingCT.indexOf('application/js') >= 0) && existingCT.indexOf('charset') < 0) {
+                newHeaders.set('Content-Type', 'application/javascript; charset=utf-8');
+            }
         }
         return new Response(response.body, { status: status, headers: newHeaders });
     } catch (wrapErr) {
-        console.error('withNoStoreCache wrap failed for', pathname, wrapErr && wrapErr.message ? wrapErr.message : wrapErr);
+        console.error('applyCachePolicy wrap failed for', pathname, wrapErr && wrapErr.message ? wrapErr.message : wrapErr);
         return response;
     }
 }
@@ -4505,7 +4530,7 @@ async function safeAssetsFetch(requestOrUrl, env, pathname) {
         }
     }
     if (!response) return null;
-    return withNoStoreCache(response, pathname || '');
+    return applyCachePolicy(response, pathname || '');
 }
 
 // =========================================================

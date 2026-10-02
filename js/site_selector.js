@@ -21,62 +21,58 @@ const WEBSITE_TYPE_SELECT = "singleproduct";
 
 /*
 =========================================================
-                BROWSER CACHE / BF-CACHE BUSTER
+              LIGHTWEIGHT BFCACHE REVALIDATION
 =========================================================
-Problem: returning visitors see stale product pages because Chrome,
-Edge, Safari and Firefox keep HTTP responses in disk cache and
-serve them from back/forward cache even when the server has since
-configured no-store headers. This block forces a network reload
-once per session AND whenever the page is restored from BFCache.
-Safe: no infinite reload loops — uses a sessionStorage flag and
-a monotonic generation counter.
+Chrome, Edge, Safari, Firefox keep responses in disk cache AND
+restore pages from Back/Forward-Cache instantly (< 50ms). We
+want that speed! This block only re-validates the page content
+when (a) the page was restored from BFCache AND (b) the stored
+content is more than 5 minutes old, so owner edits to product
+settings are picked up without a forced reload on every click.
+No timestamp ?__bust= query param is ever appended to the URL
+so the user never waits for a needless full navigation reload.
 =========================================================
 */
-(function cacheBuster() {
+(function lightweightRevalidate() {
     try {
-        var STORE_CACHE_GEN = 'store_cache_gen_v1';
-        var gen = parseInt(String((typeof sessionStorage !== 'undefined' && sessionStorage) ? sessionStorage.getItem(STORE_CACHE_GEN) || '0' : '0'), 10) || 0;
-        var hasReloaded = (typeof sessionStorage !== 'undefined' && sessionStorage) ? (sessionStorage.getItem('__cache_buster_reload_v1') === '1') : false;
-        if (window.performance && typeof window.performance.getEntriesByType === 'function') {
-            var nav = window.performance.getEntriesByType('navigation')[0];
-            // BFCache restore (back/forward) OR same-doc history replace/reload via cached copy → force reload
-            if (nav && (nav.type === 'back_forward' || (nav.restoredCount != null && nav.restoredCount > 0))) {
-                if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('__cache_buster_reload_v1', '1');
-                var sep = window.location.search ? '&' : '?';
-                window.location.replace(window.location.pathname + window.location.search + sep + '__bust=' + Date.now() + window.location.hash);
-                return;
+        var KEY = '__last_content_ts_v1';
+        var now = Date.now();
+        var isBackForward = false;
+        try {
+            if (window.performance && typeof window.performance.getEntriesByType === 'function') {
+                var nav = window.performance.getEntriesByType('navigation')[0];
+                if (nav && (nav.type === 'back_forward' || (nav.restoredCount != null && nav.restoredCount > 0))) {
+                    isBackForward = true;
+                }
             }
-        }
-        if (window.performance && performance.navigation && performance.navigation.type === 2) {
-            if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('__cache_buster_reload_v1', '1');
-            var sep = window.location.search ? '&' : '?';
-            window.location.replace(window.location.pathname + window.location.search + sep + '__bust=' + Date.now() + window.location.hash);
+            if (!isBackForward && window.performance && performance.navigation && performance.navigation.type === 2) {
+                isBackForward = true;
+            }
+        } catch (_p) { isBackForward = false; }
+        // First paint / session init / normal navigation: write timestamp and do NOTHING (no reload, no bust).
+        if (!isBackForward) {
+            try { window.sessionStorage.setItem(KEY, String(now)); } catch (_s) {}
+            // pageshow fires after BFCache restore on browsers that expose ev.persisted. If restored and stale → soft reload.
+            window.addEventListener('pageshow', function(ev) {
+                try {
+                    if (!(ev && ev.persisted)) return;
+                    var last = parseInt(String(window.sessionStorage.getItem(KEY) || '0'), 10) || 0;
+                    if ((now - last) > (5 * 60 * 1000)) {
+                        // Reload skipping local disk cache only when really stale (5+ min).
+                        try { window.location.reload(); } catch (_r) {}
+                    }
+                } catch (_e) {}
+            }, false);
             return;
         }
-        // First page-load per tab session (or after a deploy-gen bump): ensure the very first load is fresh from network
-        if (!hasReloaded && gen < 1) {
-            if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.setItem(STORE_CACHE_GEN, '1');
-                sessionStorage.setItem('__cache_buster_reload_v1', '1');
-            }
-            // If the URL has NO __bust query → append timestamp once and hard-reload bypassing cache
-            if (window.location.search.indexOf('__bust=') < 0) {
-                var sep = window.location.search ? '&' : '?';
-                var target = window.location.pathname + window.location.search + sep + '__bust=' + Date.now() + window.location.hash;
-                if (window.location.replace) { window.location.replace(target); } else { window.location.href = target; }
-                return;
-            }
+        // Back/forward restore: reload only if stale > 5 minutes else keep instant BFCache render.
+        var lastSeen = parseInt(String((typeof window.sessionStorage !== 'undefined' && window.sessionStorage)
+            ? (window.sessionStorage.getItem(KEY) || '0') : '0'), 10) || 0;
+        if ((now - lastSeen) > (5 * 60 * 1000)) {
+            try { window.sessionStorage.setItem(KEY, String(now)); } catch (_s) {}
+            try { window.location.reload(); } catch (_r) {}
         }
-        // pageshow fires after BFCache restore on browsers that expose it
-        window.addEventListener('pageshow', function(ev) {
-            try {
-                if (ev && ev.persisted) {
-                    var sep = window.location.search ? '&' : '?';
-                    window.location.replace(window.location.pathname + window.location.search + sep + '__bust=' + Date.now() + window.location.hash);
-                }
-            } catch (_e) {}
-        }, false);
     } catch (_e) {
-        // Cache-buster failure must never break the site.
+        // Revalidation logic must never break the page render.
     }
 })();
