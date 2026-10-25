@@ -18,6 +18,8 @@
       "/multiple.html",
       "/affiliate",
       "/affiliate.html",
+      "/portfolio",
+      "/portfolio.html",
       "/affiliate-details",
       "/affiliate-details.html",
       "/cart-checkout",
@@ -35,6 +37,7 @@
       "/js/config.js",
       "/js/config2.js",
       "/js/config3.js",
+      "/js/config4.js",
       "/js/site_selector.js"
     ]
   },

@@ -9,6 +9,7 @@
             const value = raw.trim().toLowerCase();
             if (value === 'multipleproducts') return 'multipleproducts';
             if (value === 'affiliate') return 'affiliate';
+            if (value === 'portfolio') return 'portfolio';
             return 'singleproduct';
         } catch (error) {
             return 'singleproduct';
@@ -18,6 +19,7 @@
     function getConfigPath(mode) {
         if (mode === 'multipleproducts') return 'js/config2.js';
         if (mode === 'affiliate') return 'js/config3.js';
+        if (mode === 'portfolio') return 'js/config4.js';
         return 'js/config.js';
     }
 
@@ -46,4 +48,3 @@
         ensureConfigLoaded: ensureConfigLoaded
     };
 })();
-

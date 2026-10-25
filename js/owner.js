@@ -76,7 +76,11 @@
         PAYMENT: 'Payment settings', MANUAL_PAYMENT: 'Manual payment', SOCIAL_LINKS: 'Social links', LOGO: 'Logo', NAVIGATION: 'Navigation',
         FOOTER_LINKS: 'Footer links', SEO: 'SEO', ANALYTICS: 'Analytics', SALES_POPUP: 'Sales popup', PROMOTION: 'Promotion',
         SOCIAL_PROOF_GALLERY: 'Social proof gallery', COMPANY: 'Company', TRUST_BADGES: 'Trust badges', CONTACT: 'Contact',
-        ABOUT_PRODUCT: 'About product', HERO_TRUST: 'Hero trust items', STICKY_CTA: 'Sticky CTA', STORE_CONTENT: 'Store content',
+        ABOUT_PRODUCT: 'About product', HERO_TRUST: 'Hero trust items', STICKY_CTA: 'Sticky CTA',         STORE_CONTENT: 'Store content', PORTFOLIO_PROFILE: 'Portfolio profile', PORTFOLIO_SKILLS: 'Portfolio skills',
+        PORTFOLIO_SERVICES: 'Portfolio services', PORTFOLIO_PROJECTS: 'Portfolio projects',
+        PORTFOLIO_EXPERIENCE: 'Portfolio experience', PORTFOLIO_EDUCATION: 'Portfolio education',
+        PORTFOLIO_TESTIMONIALS: 'Portfolio testimonials', PORTFOLIO_SECTIONS: 'Portfolio section visibility',
+        PORTFOLIO_CUSTOM_SECTIONS: 'Custom portfolio sections',
         PRODUCTS: 'Products', AFFILIATE_PRODUCTS: 'Affiliate products', WEBSITE_TYPE_SELECT: 'Active website mode',
         SYSTEM_CONFIG: 'System configuration'
     };
@@ -183,6 +187,20 @@
         safeFill('PACKAGES', []);
         safeFill('PRODUCTS', []);
         safeFill('AFFILIATE_PRODUCTS', []);
+        safeFill('PORTFOLIO_PROFILE', {});
+        safeFill('PORTFOLIO_SKILLS', []);
+        safeFill('PORTFOLIO_SERVICES', []);
+        safeFill('PORTFOLIO_PROJECTS', []);
+        safeFill('PORTFOLIO_EXPERIENCE', []);
+        safeFill('PORTFOLIO_EDUCATION', []);
+        safeFill('PORTFOLIO_TESTIMONIALS', []);
+        safeFill('PORTFOLIO_SECTIONS', {
+            about: true, services: true, skills: true, projects: true,
+            experience: true, education: true, testimonials: true, contact: true
+        });
+        safeFill('PORTFOLIO_CUSTOM_SECTIONS', [{
+            enabled: true, label: '', title: '', body: '', ctaText: '', ctaUrl: ''
+        }]);
         safeFill('API_BASE_URL', '');
         safeFill('WEBSITE_TYPE_SELECT', 'singleproduct');
         return filled;
@@ -390,13 +408,71 @@
         return wrap;
     }
 
+    function makeResumeUploadControls(input, path) {
+        var wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.flexDirection = 'column';
+        wrap.style.gap = '6px';
+        wrap.style.flex = '1 1 auto';
+        var inputRow = document.createElement('div');
+        inputRow.style.display = 'flex';
+        inputRow.style.gap = '8px';
+        inputRow.style.alignItems = 'center';
+        inputRow.appendChild(input);
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'application/pdf,.pdf';
+        fileInput.style.display = 'none';
+        var uploadBtn = document.createElement('button');
+        uploadBtn.type = 'button';
+        uploadBtn.className = 'btn btn-secondary';
+        uploadBtn.textContent = 'Upload Resume';
+        uploadBtn.style.padding = '8px 12px';
+        uploadBtn.style.flexShrink = '0';
+        var statusEl = document.createElement('div');
+        statusEl.className = 'owner-image-status';
+        uploadBtn.addEventListener('click', function() { fileInput.click(); });
+        fileInput.addEventListener('change', async function() {
+            var file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            try {
+                var result = await uploadImageFile(file, path, function(percent) {
+                    uploadBtn.textContent = 'Uploading ' + percent + '%';
+                });
+                if (result && result.url) {
+                    input.value = String(result.url);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    updateOwnerFieldStatus(wrap, statusEl, 'Resume uploaded. Save settings to publish it.', false);
+                }
+            } catch (error) {
+                updateOwnerFieldStatus(wrap, statusEl, error.message || 'Resume upload failed', true);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Resume';
+                fileInput.value = '';
+            }
+        });
+        inputRow.appendChild(uploadBtn);
+        wrap.appendChild(inputRow);
+        wrap.appendChild(statusEl);
+        return wrap;
+    }
+
     function makeInput(label, value, path) {
         var field = document.createElement('label');
         field.className = 'owner-field' + (typeof value === 'boolean' ? ' owner-checkbox-field' : '');
         var text = document.createElement('span');
         text.textContent = label;
         var input;
-        if (typeof value === 'boolean') {
+        var fieldKey = pathLeafKey(path);
+        var isColorField = typeof value === 'string' && /color|background|border/i.test(String(fieldKey || label));
+        if (isColorField && /^#[0-9a-f]{6}$/i.test(String(value || ''))) {
+            input = document.createElement('input');
+            input.type = 'color';
+            input.value = String(value);
+        } else if (typeof value === 'boolean') {
             input = document.createElement('input');
             input.type = 'checkbox';
             input.checked = value;
@@ -420,8 +496,11 @@
         var isImage = !!(typeof value === 'string' && value !== '' &&
             /\.(jpg|jpeg|png|webp|gif|svg|avif|bmp)(\?|#|$)/i.test(String(value).trim())) ||
             isImageFieldKey(label) || isImageFieldKey(pathLeafKey(path));
+        var isResume = typeof value === 'string' && /resume|cv/i.test(String(path || label));
 
-        if (typeof value !== 'boolean' && typeof value !== 'number' &&
+        if (isResume && typeof value === 'string') {
+            field.appendChild(makeResumeUploadControls(input, path));
+        } else if (typeof value !== 'boolean' && typeof value !== 'number' &&
             !(String(value || '').length > 100 || String(value || '').indexOf('\n') >= 0) && isImage) {
             field.appendChild(makeUploadControls(input, path));
         } else {
@@ -552,7 +631,7 @@
     function setConfigModeBanner(mode) {
         var el = document.getElementById('owner-config-mode-banner');
         if (!el || !mode) return;
-        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : 'Affiliate');
+        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : (mode === 'portfolio' ? 'Professional Portfolio' : 'Affiliate'));
         el.textContent = 'Editing ' + label + ' template settings only. Change Store Mode above to manage another template.';
     }
 
@@ -780,7 +859,7 @@
             var cfg = await fetchConfig('singleproduct');
             if (cfg && cfg.WEBSITE_TYPE_SELECT) {
                 var v = String(cfg.WEBSITE_TYPE_SELECT).toLowerCase();
-                if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate') detected = v;
+                if (v === 'singleproduct' || v === 'multipleproducts' || v === 'affiliate' || v === 'portfolio') detected = v;
             }
         } catch (e) {}
         activeProductsMode = detected;
@@ -799,7 +878,7 @@
 
     async function applyModeGate(mode) {
         var target = String(mode || '').toLowerCase();
-        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
+        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate' && target !== 'portfolio') target = 'multipleproducts';
         setModeGateStatus('Applying ' + target + '...');
         try {
             // Persist (mirrored to all 3 KV buckets via worker handleOwnerConfigSave)
@@ -1446,7 +1525,7 @@
         var sel = document.getElementById('owner-site-mode');
         if (!sel) return;
         var target = String(sel.value || 'multipleproducts').toLowerCase();
-        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate') target = 'multipleproducts';
+        if (target !== 'singleproduct' && target !== 'multipleproducts' && target !== 'affiliate' && target !== 'portfolio') target = 'multipleproducts';
         setSiteModeStatus('Applying ' + target + '...');
         var ok = await applyModeGate(target);
         if (!ok) {
@@ -1519,7 +1598,7 @@
             if (liveMode) liveMode.textContent = String(data.activeInFile || 'multipleproducts');
             // Sync the header Store Mode + products/settings mode state to the newly saved value
             var chosen = String(data.activeInFile || '').toLowerCase();
-            if (chosen && (chosen === 'singleproduct' || chosen === 'multipleproducts' || chosen === 'affiliate')) {
+            if (chosen && (chosen === 'singleproduct' || chosen === 'multipleproducts' || chosen === 'affiliate' || chosen === 'portfolio')) {
                 setSiteModeSelectValue(chosen);
                 activeProductsMode = chosen;
                 configMode = chosen;
@@ -1543,11 +1622,12 @@
     function applySiteSelectorPreset(mode) {
         var ta = document.getElementById('site-selector-editor-textarea');
         if (!ta) return;
-        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : 'Affiliate');
+        var label = mode === 'multipleproducts' ? 'Multiple Products' : (mode === 'singleproduct' ? 'Single Product' : (mode === 'portfolio' ? 'Professional Portfolio' : 'Affiliate'));
         var value = mode;
         var commentS = mode === 'singleproduct' ? '' : '//';
         var commentM = mode === 'multipleproducts' ? '' : '//';
         var commentA = mode === 'affiliate' ? '' : '//';
+        var commentP = mode === 'portfolio' ? '' : '//';
         var content = [
             '/*',
             '=========================================================',
@@ -1564,6 +1644,7 @@
             '- "singleproduct"    → One focused landing page, inline checkout',
             '- "multipleproducts" → Store with multiple products + cart + checkout',
             '- "affiliate"        → Showcase multiple products but link out externally',
+            '- "portfolio"        → Professional portfolio, resume, projects, and services',
             '=========================================================',
             '',
             'Current applied preset: ' + label,
@@ -1573,6 +1654,7 @@
             commentS + 'const WEBSITE_TYPE_SELECT = "singleproduct";',
             commentM + 'const WEBSITE_TYPE_SELECT = "multipleproducts";',
             commentA + 'const WEBSITE_TYPE_SELECT = "affiliate";',
+            commentP + 'const WEBSITE_TYPE_SELECT = "portfolio";',
             ''
         ].join('\n');
         ta.value = content;
@@ -2301,12 +2383,20 @@
             'WHATSAPP_NUMBERS', 'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS',
             'SALES_POPUP', 'PROMOTION', 'TRUST_BADGES', 'WEBSITE_TYPE_SELECT', 'API_BASE_URL',
             'SYSTEM_CONFIG'
+        ],
+        portfolio: [
+            'BUSINESS', 'BRAND', 'CONTACT', 'PORTFOLIO_PROFILE', 'PORTFOLIO_SKILLS',
+            'PORTFOLIO_SERVICES', 'PORTFOLIO_PROJECTS', 'PORTFOLIO_EXPERIENCE',
+            'PORTFOLIO_EDUCATION', 'PORTFOLIO_TESTIMONIALS', 'PORTFOLIO_SECTIONS',
+            'PORTFOLIO_CUSTOM_SECTIONS', 'SOCIAL_LINKS',
+            'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'WEBSITE_TYPE_SELECT',
+            'API_BASE_URL', 'SYSTEM_CONFIG'
         ]
     };
 
     function isConfigSectionVisibleForMode(key, mode) {
         var m = String(mode || configMode || 'multipleproducts').toLowerCase();
-        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate') m = 'multipleproducts';
+        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate' && m !== 'portfolio') m = 'multipleproducts';
         var map = configSectionByMode[m] || configSectionByMode.multipleproducts;
         if (key === 'WEBSITE_TYPE_SELECT' || key === 'API_BASE_URL' || key === 'SYSTEM_CONFIG') return true;
         return map.indexOf(key) >= 0;
@@ -2316,11 +2406,12 @@
         singleproduct: ['overview', 'orders', 'products', 'site-selector', 'settings'],
         multipleproducts: ['overview', 'orders', 'products', 'site-selector', 'settings'],
         affiliate: ['overview', 'orders', 'products', 'site-selector', 'settings']
+        , portfolio: ['overview', 'site-selector', 'settings']
     };
 
     function syncSidebarToStoreMode(mode) {
         var m = String(mode || configMode || 'multipleproducts').toLowerCase();
-        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate') m = 'multipleproducts';
+        if (m !== 'singleproduct' && m !== 'multipleproducts' && m !== 'affiliate' && m !== 'portfolio') m = 'multipleproducts';
 
         // Settings sublist (already rendered): hide any data-section-jump entries not valid for current mode.
         var sublist = document.getElementById('owner-sidebar-settings-sub');
@@ -2363,7 +2454,7 @@
 
         // Store Products view tab controls: hide "Add product" for single (already done, just defensive)
         var addBtn = document.getElementById('owner-add-product-btn');
-        if (addBtn) addBtn.style.display = (m === 'singleproduct') ? 'none' : '';
+        if (addBtn) addBtn.style.display = (m === 'singleproduct' || m === 'portfolio') ? 'none' : '';
 
         // Store Products mode label: refresh with current mode.
         var modeLabel = document.getElementById('owner-products-mode-label');
@@ -2371,6 +2462,7 @@
             singleproduct: 'Single product storefront',
             multipleproducts: 'Multi-product storefront',
             affiliate: 'Affiliate storefront'
+            , portfolio: 'Professional portfolio'
         })[m] || ('Mode: ' + m);
 
         var modeBannerLabel = document.getElementById('owner-overview-mode-label');
@@ -2378,6 +2470,7 @@
             singleproduct: 'Single Product',
             multipleproducts: 'Multiple Products',
             affiliate: 'Affiliate'
+            , portfolio: 'Professional Portfolio'
         })[m] || m;
     }
 
@@ -3168,6 +3261,7 @@
         var label = 'Multiple Products';
         if (m === 'singleproduct') label = 'Single Product';
         else if (m === 'affiliate') label = 'Affiliate';
+        else if (m === 'portfolio') label = 'Professional Portfolio';
         var el = document.getElementById('owner-mobile-mode-label');
         if (el) el.textContent = label;
     }
@@ -3363,7 +3457,7 @@
                 if (sbm && v) sbm.value = v;
                 var banner = document.getElementById('owner-config-mode-banner');
                 if (banner && v) {
-                    var label = v === 'singleproduct' ? 'Single Product' : (v === 'affiliate' ? 'Affiliate' : 'Multiple Products');
+                    var label = v === 'singleproduct' ? 'Single Product' : (v === 'affiliate' ? 'Affiliate' : (v === 'portfolio' ? 'Professional Portfolio' : 'Multiple Products'));
                     banner.textContent = 'Editing ' + label + ' template settings';
                     var overviewLabel = document.getElementById('owner-overview-mode-label');
                     if (overviewLabel) overviewLabel.textContent = label;

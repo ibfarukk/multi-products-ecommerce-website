@@ -1,10 +1,10 @@
-# Current version is Version 3.0.1
+# Current version is Version 3.7
 # We provide Regular Update and new Features
 # UP COMING FEATURE IS (PORTFOLIO)
 
 # PMELAB TECHNOLOGY LIMITED — Multi-Products E-commerce Website
 
-A modern, production-ready multi-template e-commerce platform with three built-in storefront modes: **Single Product Landing Page**, **Multiple Products Store**, and **Affiliate / Products Marketplace**. Powered by a Cloudflare Workers backend + Cloudflare Pages for static assets, with native support for **Paystack**, **Flutterwave**, and **verified manual bank transfer** payments.
+A modern, production-ready multi-template platform with four built-in modes: **Single Product Landing Page**, **Multiple Products Store**, **Affiliate / Products Marketplace**, and **Professional Portfolio**. Powered by a Cloudflare Workers backend + Cloudflare Pages for static assets, with native support for **Paystack**, **Flutterwave**, and **verified manual bank transfer** payments.
 
 > Built & maintained by **PMELAB TECHNOLOGY LIMITED**.
 
@@ -33,9 +33,12 @@ This repo is a complete, editable storefront you can use as:
 | **Single Product Page** | Launch a single high-converting landing page for one product, package, or offer |
 | **Multiple Products Store** | Run a full online shop with products, search, cart, checkout, and product details pages |
 | **Affiliate / Products Marketplace** | Showcase products and send buyers to vendor/partner URLs while tracking clicks per product |
+| **Professional Portfolio** | Present a professional profile, services, skills, projects, resume, experience, and contact CTAs |
 
 ### Features included
-- 3 storefront templates in 1 deployment — switch instantly from the owner dashboard
+- 4 templates in 1 deployment — switch instantly from the owner dashboard
+- Portfolio owners can hide built-in sections and add custom sections from the dashboard
+- Portfolio owners can upload a PDF resume from the dashboard; the public page exposes it through the Download my resume CTA
 - Owner admin dashboard with:
   - Per-mode editable settings (Business, Brand, Products, FAQ, Footer, Navigation, Social Links, Logo, WhatsApp Numbers, SEO, Analytics, Trust Badges, Sticky CTA, etc.)
   - Product CRUD (Add / Edit / Delete products, images, specifications, packages)

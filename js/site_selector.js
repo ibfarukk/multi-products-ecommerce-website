@@ -12,12 +12,14 @@ Available modes:
 - "singleproduct"    → One product checkout (current template)
 - "multipleproducts" → Store with multiple products + cart + checkout
 - "affiliate"        → Multiple products but no checkout (links out)
+- "portfolio"        → Professional portfolio, resume, and services site
 =========================================================
 */
 
 //const WEBSITE_TYPE_SELECT = "singleproduct";
 //const WEBSITE_TYPE_SELECT = "multipleproducts";
-const WEBSITE_TYPE_SELECT = "affiliate";
+//const WEBSITE_TYPE_SELECT = "affiliate";
+const WEBSITE_TYPE_SELECT = "portfolio";
 
 /*
 =========================================================

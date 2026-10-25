@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional portfolio">
+    <title>Professional Portfolio</title>
+    <link rel="icon" type="image/jpeg" href="productsimages/logo.jpg">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/portfolio.css">
+    <script src="js/site_selector.js"></script>
+    <script>
+        (function() {
+            try {
+                var value = typeof WEBSITE_TYPE_SELECT !== 'undefined' ? String(WEBSITE_TYPE_SELECT).trim().toLowerCase() : 'singleproduct';
+                if (value !== 'portfolio') window.location.replace('index.html');
+            } catch (error) {}
+        })();
+    </script>
+</head>
+<body class="portfolio-page">
+    <header class="portfolio-header">
+        <div class="portfolio-container portfolio-header-inner">
+            <a class="portfolio-logo" href="#home"><span id="portfolio-logo-mark">Y</span><span id="portfolio-logo-name">Your Name</span></a>
+            <nav class="portfolio-nav" id="portfolio-nav"></nav>
+            <a class="portfolio-header-cta" href="#contact">Let's talk</a>
+            <button class="portfolio-menu-button" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        </div>
+        <nav class="portfolio-mobile-nav" id="portfolio-mobile-nav"></nav>
+    </header>
+
+    <main>
+        <section class="portfolio-hero" id="home">
+            <div class="portfolio-container portfolio-hero-grid">
+                <div class="portfolio-hero-content portfolio-reveal">
+                    <p class="portfolio-eyebrow" id="portfolio-eyebrow"></p>
+                    <h1 id="portfolio-headline"></h1>
+                    <p class="portfolio-lead" id="portfolio-short-bio"></p>
+                    <div class="portfolio-actions" id="portfolio-actions"></div>
+                    <div class="portfolio-availability" id="portfolio-availability"></div>
+                </div>
+                <div class="portfolio-hero-visual portfolio-reveal portfolio-reveal-delay">
+                    <div class="portfolio-hero-image-wrap"><img id="portfolio-profile-image" src="" alt="" loading="eager"></div>
+                    <div class="portfolio-hero-card"><strong id="portfolio-professional-title"></strong><span id="portfolio-hero-location"></span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="portfolio-section portfolio-about" id="about">
+            <div class="portfolio-container portfolio-two-column portfolio-reveal">
+                <div><p class="portfolio-kicker">ABOUT ME</p><h2>A little more about how I work.</h2></div>
+                <div><p id="portfolio-long-bio"></p><p class="portfolio-location" id="portfolio-location"></p></div>
+            </div>
+        </section>
+
+        <section class="portfolio-section portfolio-muted" id="services">
+            <div class="portfolio-container portfolio-reveal"><p class="portfolio-kicker">WHAT I DO</p><h2>Turning ideas into meaningful outcomes.</h2><div class="portfolio-services-grid" id="portfolio-services"></div></div>
+        </section>
+
+        <section class="portfolio-section" id="skills">
+            <div class="portfolio-container portfolio-two-column portfolio-reveal"><div><p class="portfolio-kicker">CAPABILITIES</p><h2>Skills I bring to the table.</h2></div><div class="portfolio-skills-list" id="portfolio-skills"></div></div>
+        </section>
+
+        <section class="portfolio-section portfolio-muted" id="projects">
+            <div class="portfolio-container portfolio-reveal"><div class="portfolio-section-heading"><div><p class="portfolio-kicker">SELECTED WORK</p><h2>Projects with purpose.</h2></div><p>Selected case studies showing the challenge, thinking, and outcome behind the work.</p></div><div class="portfolio-projects-grid" id="portfolio-projects"></div></div>
+        </section>
+
+        <section class="portfolio-section" id="experience">
+            <div class="portfolio-container portfolio-two-column"><div><p class="portfolio-kicker">EXPERIENCE</p><h2>Building, learning, and improving.</h2></div><div class="portfolio-timeline" id="portfolio-experience"></div></div>
+        </section>
+
+        <section class="portfolio-section portfolio-muted" id="education">
+            <div class="portfolio-container"><p class="portfolio-kicker">EDUCATION &amp; CERTIFICATIONS</p><div class="portfolio-education-grid" id="portfolio-education"></div></div>
+        </section>
+
+        <section class="portfolio-section portfolio-testimonial-section" id="testimonials">
+            <div class="portfolio-container"><p class="portfolio-kicker">KIND WORDS</p><div class="portfolio-testimonials" id="portfolio-testimonials"></div></div>
+        </section>
+
+        <div id="portfolio-custom-sections"></div>
+
+        <section class="portfolio-contact" id="contact">
+            <div class="portfolio-container portfolio-contact-inner"><div><p class="portfolio-kicker">GET IN TOUCH</p><h2 id="portfolio-contact-title"></h2><p id="portfolio-contact-subtitle"></p></div><div class="portfolio-contact-actions" id="portfolio-contact-actions"></div></div>
+        </section>
+    </main>
+
+    <footer class="portfolio-footer"><div class="portfolio-container"><div><strong id="portfolio-footer-name"></strong><p>Available for thoughtful collaborations and new opportunities.</p></div><div class="portfolio-footer-social" id="portfolio-footer-social"></div><small id="portfolio-footer-copy"></small></div></footer>
+    <div class="portfolio-floating-contact" aria-label="Quick contact actions">
+        <a class="portfolio-floating-contact-link portfolio-floating-email" id="portfolio-floating-email" href="" aria-label="Email me">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="m3 7 9 6 9-6"/></svg>
+            <span>Email me</span>
+        </a>
+        <a class="portfolio-floating-contact-link portfolio-floating-call" id="portfolio-floating-call" href="" aria-label="Call me">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92Z"/></svg>
+            <span>Call me</span>
+        </a>
+    </div>
+    <div class="portfolio-dialog-backdrop" id="portfolio-dialog-backdrop" hidden>
+        <div class="portfolio-dialog" role="dialog" aria-modal="true" aria-labelledby="portfolio-dialog-title">
+            <button class="portfolio-dialog-close" id="portfolio-dialog-close" type="button" aria-label="Close project details">×</button>
+            <div class="portfolio-dialog-image-wrap"><img id="portfolio-dialog-image" src="" alt=""></div>
+            <div class="portfolio-dialog-content">
+                <p class="portfolio-project-category" id="portfolio-dialog-category"></p>
+                <h2 id="portfolio-dialog-title"></h2>
+                <p id="portfolio-dialog-description"></p>
+                <div class="portfolio-dialog-columns"><div><span class="portfolio-dialog-label">Role</span><strong id="portfolio-dialog-role"></strong></div><div><span class="portfolio-dialog-label">Year</span><strong id="portfolio-dialog-year"></strong></div></div>
+                <p class="portfolio-dialog-label">Technology</p><div class="portfolio-tags" id="portfolio-dialog-tags"></div>
+                <p id="portfolio-dialog-outcome"></p>
+                <div class="portfolio-dialog-actions" id="portfolio-dialog-actions"></div>
+            </div>
+        </div>
+    </div>
+    <script src="js/config4.js"></script>
+    <script src="js/portfolio.js"></script>
+</body>
+</html>

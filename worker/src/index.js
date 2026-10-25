@@ -630,16 +630,19 @@ export default {
                 //   /js/config.js    -> singleproduct
                 //   /js/config2.js   -> multipleproducts
                 //   /js/config3.js   -> affiliate
+                //   /js/config4.js   -> portfolio
                 //   /js/site_selector.js -> site selector rewrite
                 const isConfigJs = pathname === '/js/config.js'
                     || pathname === '/js/config2.js'
                     || pathname === '/js/config3.js'
+                    || pathname === '/js/config4.js'
                     || pathname === '/js/site_selector.js';
                 if (isConfigJs) {
                     let assetPath = pathname;
                     if (pathname === '/js/config.js') assetPath = '/js/config.js';
                     else if (pathname === '/js/config2.js') assetPath = '/js/config2.js';
                     else if (pathname === '/js/config3.js') assetPath = '/js/config3.js';
+                    else if (pathname === '/js/config4.js') assetPath = '/js/config4.js';
                     try {
                         return handlePublicConfigAsset(request, env, assetPath);
                     } catch (hpcaErr) {
@@ -655,6 +658,7 @@ export default {
                     '/singleproduct': '/index.html',
                     '/multiple': '/multiple.html',
                     '/affiliate': '/affiliate.html',
+                    '/portfolio': '/portfolio.html',
                     '/affiliate-details': '/affiliate-details.html',
                     '/checkout': '/checkout.html',
                     '/cart-checkout': '/cart-checkout.html',
@@ -678,6 +682,7 @@ export default {
                 const mode = await getSiteMode(env);
                 if (mode === 'multipleproducts') return Response.redirect('/multiple.html', 302);
                 if (mode === 'affiliate') return Response.redirect('/affiliate.html', 302);
+                if (mode === 'portfolio') return Response.redirect('/portfolio.html', 302);
             } catch (err) {
                     // Fall through: serve index.html normally on any error.
                 }
@@ -692,6 +697,8 @@ export default {
                     '/multiple': 'multipleproducts',
                     '/affiliate.html': 'affiliate',
                     '/affiliate': 'affiliate',
+                    '/portfolio.html': 'portfolio',
+                    '/portfolio': 'portfolio',
                     '/index.html': 'singleproduct',
                     '/checkout.html': 'singleproduct',
                     '/checkout': 'singleproduct',
@@ -706,12 +713,13 @@ export default {
                 if (allowed !== undefined) {
                     const activeMode = await getSiteMode(env);
                     if (typeof allowed === 'string' && activeMode !== allowed) {
-                        const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : '/index.html');
+                        const target = activeMode === 'multipleproducts' ? '/multiple.html' : (activeMode === 'affiliate' ? '/affiliate.html' : (activeMode === 'portfolio' ? '/portfolio.html' : '/index.html'));
                         return Response.redirect(target, 302);
                     }
                 } else if (path === '/product-details.html' || path === '/product-details') {
                     const activeMode = await getSiteMode(env);
                     if (activeMode === 'affiliate') return Response.redirect('/affiliate.html', 302);
+                    if (activeMode === 'portfolio') return Response.redirect('/portfolio.html', 302);
                     if (activeMode === 'singleproduct') return Response.redirect('/index.html', 302);
                 }
             } catch (err) {
@@ -2134,12 +2142,12 @@ async function handleOwnerConfigSave(request, env) {
 
     await env.OWNER_STATS.put('site-config-' + mode, JSON.stringify(config));
     // If the saved payload carries a new WEBSITE_TYPE_SELECT, also mirror it into
-    // the other two mode buckets so switching Settings sub-tab cannot silently erase it.
+    // the other mode buckets so switching Settings sub-tab cannot silently erase it.
     const chosen = config && typeof config.WEBSITE_TYPE_SELECT === 'string'
         ? normalizeSiteMode(config.WEBSITE_TYPE_SELECT)
         : null;
     if (chosen) {
-        const otherModes = ['singleproduct', 'multipleproducts', 'affiliate'].filter(function(m) { return m !== mode; });
+        const otherModes = ['singleproduct', 'multipleproducts', 'affiliate', 'portfolio'].filter(function(m) { return m !== mode; });
         for (const other of otherModes) {
             try {
                 const existing = await getStoredConfig(env, other);
@@ -2216,6 +2224,7 @@ async function readSiteSelectorRaw(env) {
         '//const WEBSITE_TYPE_SELECT = "singleproduct";',
         'const WEBSITE_TYPE_SELECT = "multipleproducts";',
         '//const WEBSITE_TYPE_SELECT = "affiliate";',
+        '//const WEBSITE_TYPE_SELECT = "portfolio";',
         ''
     ].join('\n');
     return { text: defaultText, source: 'default' };
@@ -2257,7 +2266,7 @@ async function handleOwnerSiteSelectorSave(request, env) {
         await env.OWNER_STATS.put(SITE_SELECTOR_KV_KEY, content);
         siteSelectorOverrideCache = content;
         // Mirror WEBSITE_TYPE_SELECT to all three site-config buckets so getStoredSiteMode picks it up instantly.
-        const modes = ['singleproduct', 'multipleproducts', 'affiliate'];
+        const modes = ['singleproduct', 'multipleproducts', 'affiliate', 'portfolio'];
         for (const other of modes) {
             try {
                 const existing = await getStoredConfig(env, other);
@@ -2315,7 +2324,7 @@ async function handlePublicConfigAsset(request, env, path) {
             return new Response(source + '\n// source: ' + (sourceAsset || 'assets') + '\n', { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'private, max-age=10, stale-while-revalidate=60' } });
         }
 
-        const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : 'singleproduct');
+        const mode = path === '/js/config2.js' ? 'multipleproducts' : (path === '/js/config3.js' ? 'affiliate' : (path === '/js/config4.js' ? 'portfolio' : 'singleproduct'));
         let override = null;
         try { override = await getStoredConfig(env, mode); } catch (sc) { override = null; }
         const contentType = 'application/javascript';
@@ -2342,6 +2351,9 @@ async function handlePublicConfigAsset(request, env, path) {
                 'SOCIAL_LINKS', 'LOGO', 'NAVIGATION', 'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION',
                 'SOCIAL_PROOF_GALLERY', 'COMPANY', 'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA',
                 'STORE_CONTENT', 'PRODUCTS', 'AFFILIATE_PRODUCTS'
+                , 'PORTFOLIO_PROFILE', 'PORTFOLIO_SKILLS', 'PORTFOLIO_SERVICES', 'PORTFOLIO_PROJECTS',
+                'PORTFOLIO_EXPERIENCE', 'PORTFOLIO_EDUCATION', 'PORTFOLIO_TESTIMONIALS',
+                'PORTFOLIO_SECTIONS', 'PORTFOLIO_CUSTOM_SECTIONS'
             ];
             try {
                 const assignments = Object.keys(override).filter(function(key) {
@@ -3217,7 +3229,8 @@ let siteConfigCache = { loadedAt: 0, key: '', value: null, promise: null };
 
 function normalizeSiteMode(value) {
     const mode = String(value || '').trim().toLowerCase();
-    return mode === 'multipleproducts' ? mode : (mode === 'affiliate' ? mode : 'singleproduct');
+    if (mode === 'multipleproducts' || mode === 'affiliate' || mode === 'portfolio') return mode;
+    return 'singleproduct';
 }
 
 async function getStoredConfig(env, mode) {
@@ -3264,7 +3277,7 @@ async function getStoredSiteMode(env) {
 
 async function getSiteConfigForMode(env, mode) {
     const selectedMode = normalizeSiteMode(mode);
-    const configPath = selectedMode === 'multipleproducts' ? '/js/config2.js' : (selectedMode === 'affiliate' ? '/js/config3.js' : '/js/config.js');
+    const configPath = selectedMode === 'multipleproducts' ? '/js/config2.js' : (selectedMode === 'affiliate' ? '/js/config3.js' : (selectedMode === 'portfolio' ? '/js/config4.js' : '/js/config.js'));
     const config = {};
     const names = [
         'BUSINESS', 'API_BASE_URL', 'BRAND', 'PRODUCT', 'PRODUCT_TYPE', 'PRODUCT_IMAGES', 'PRODUCT_VIDEOS',
@@ -3272,7 +3285,9 @@ async function getSiteConfigForMode(env, mode) {
         'FAQ', 'WHATSAPP_NUMBERS', 'PAYMENT', 'MANUAL_PAYMENT', 'SOCIAL_LINKS', 'LOGO', 'NAVIGATION',
         'FOOTER_LINKS', 'SEO', 'ANALYTICS', 'SALES_POPUP', 'PROMOTION', 'SOCIAL_PROOF_GALLERY', 'COMPANY',
         'TRUST_BADGES', 'CONTACT', 'ABOUT_PRODUCT', 'HERO_TRUST', 'STICKY_CTA', 'STORE_CONTENT', 'PRODUCTS',
-        'AFFILIATE_PRODUCTS'
+        'AFFILIATE_PRODUCTS', 'PORTFOLIO_PROFILE', 'PORTFOLIO_SKILLS', 'PORTFOLIO_SERVICES',
+        'PORTFOLIO_PROJECTS', 'PORTFOLIO_EXPERIENCE', 'PORTFOLIO_EDUCATION', 'PORTFOLIO_TESTIMONIALS',
+        'PORTFOLIO_SECTIONS', 'PORTFOLIO_CUSTOM_SECTIONS'
     ];
     names.forEach(function(name) { config[name] = null; });
 
@@ -3362,7 +3377,7 @@ async function getSiteMode(env) {
                 const regex = /const\s+WEBSITE_TYPE_SELECT\s*=\s*["']([^"']+)["']\s*;?/ig;
                 const matches = Array.from(String(cleaned || '').matchAll(regex));
                 const value = String(matches.length ? matches[matches.length - 1][1] : '').trim().toLowerCase();
-                const mode = (value === 'multipleproducts' || value === 'affiliate' || value === 'singleproduct' || value === 'sigleproduct')
+                const mode = (value === 'multipleproducts' || value === 'affiliate' || value === 'portfolio' || value === 'singleproduct' || value === 'sigleproduct')
                     ? (value === 'sigleproduct' ? 'singleproduct' : value)
                     : 'singleproduct';
 
@@ -3463,7 +3478,7 @@ async function getSiteConfig(env) {
     try { mode = await getSiteMode(env); } catch (_m) { mode = 'singleproduct'; }
     const configPath = mode === 'multipleproducts'
         ? '/js/config2.js'
-        : (mode === 'affiliate' ? '/js/config3.js' : '/js/config.js');
+        : (mode === 'affiliate' ? '/js/config3.js' : (mode === 'portfolio' ? '/js/config4.js' : '/js/config.js'));
     const cacheKey = mode + ':' + configPath;
 
     if (siteConfigCache.value && siteConfigCache.key === cacheKey && now - siteConfigCache.loadedAt < ttlMs) {
@@ -3477,7 +3492,10 @@ async function getSiteConfig(env) {
     siteConfigCache.promise = (async function() {
         let site = {
             BUSINESS: null, BRAND: null, PRODUCT: null, PACKAGES: null,
-            PRODUCTS: null, AFFILIATE_PRODUCTS: null, PAYMENT: null, MANUAL_PAYMENT: null
+            PRODUCTS: null, AFFILIATE_PRODUCTS: null, PAYMENT: null, MANUAL_PAYMENT: null,
+            PORTFOLIO_PROFILE: null, PORTFOLIO_SKILLS: null, PORTFOLIO_SERVICES: null,
+            PORTFOLIO_PROJECTS: null, PORTFOLIO_EXPERIENCE: null, PORTFOLIO_EDUCATION: null,
+            PORTFOLIO_TESTIMONIALS: null
         };
         if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
             let response = null;
@@ -3500,7 +3518,14 @@ async function getSiteConfig(env) {
                         PRODUCTS: parseJsConst(text, 'PRODUCTS'),
                         AFFILIATE_PRODUCTS: parseJsConst(text, 'AFFILIATE_PRODUCTS'),
                         PAYMENT: parseJsConst(text, 'PAYMENT'),
-                        MANUAL_PAYMENT: parseJsConst(text, 'MANUAL_PAYMENT')
+                        MANUAL_PAYMENT: parseJsConst(text, 'MANUAL_PAYMENT'),
+                        PORTFOLIO_PROFILE: parseJsConst(text, 'PORTFOLIO_PROFILE'),
+                        PORTFOLIO_SKILLS: parseJsConst(text, 'PORTFOLIO_SKILLS'),
+                        PORTFOLIO_SERVICES: parseJsConst(text, 'PORTFOLIO_SERVICES'),
+                        PORTFOLIO_PROJECTS: parseJsConst(text, 'PORTFOLIO_PROJECTS'),
+                        PORTFOLIO_EXPERIENCE: parseJsConst(text, 'PORTFOLIO_EXPERIENCE'),
+                        PORTFOLIO_EDUCATION: parseJsConst(text, 'PORTFOLIO_EDUCATION'),
+                        PORTFOLIO_TESTIMONIALS: parseJsConst(text, 'PORTFOLIO_TESTIMONIALS')
                     };
                 } catch (_readErr) {}
             }
@@ -4446,7 +4471,7 @@ function resolveCachePolicy(pathname, contentType) {
     if (lower.startsWith('/api/owner/')) return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
     if (lower === '/api/owner/licence/status') return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
     // Worker-injected dynamic JS: changes when owner edits Template Settings.
-    if (lower === '/js/config.js' || lower === '/js/config2.js' || lower === '/js/config3.js' || lower === '/js/site_selector.js') {
+    if (lower === '/js/config.js' || lower === '/js/config2.js' || lower === '/js/config3.js' || lower === '/js/config4.js' || lower === '/js/site_selector.js') {
         return { cc: 'private, max-age=10, stale-while-revalidate=60' };
     }
     // Static JS files (owner.js, checkout.js, product_details.js, multiple.js, affiliate.js, etc.)
@@ -4462,13 +4487,13 @@ function resolveCachePolicy(pathname, contentType) {
         lower.startsWith('/img/') || lower.startsWith('/assets/') || lower.startsWith('/icons/') ||
         lower.startsWith('/fonts/') || lower === '/favicon.ico' || lower.endsWith('.png') || lower.endsWith('.jpg') ||
         lower.endsWith('.jpeg') || lower.endsWith('.webp') || lower.endsWith('.svg') || lower.endsWith('.gif') ||
-        lower.endsWith('.ico') || lower.endsWith('.woff') || lower.endsWith('.woff2') || lower.endsWith('.ttf')) {
+        lower.endsWith('.ico') || lower.endsWith('.pdf') || lower.endsWith('.woff') || lower.endsWith('.woff2') || lower.endsWith('.ttf')) {
         return { cc: 'public, max-age=31536000, immutable' };
     }
     // Any API (non-owner) — paystack/flutterwave verify, payment status, etc.
     if (lower.startsWith('/api/')) return { cc: 'no-store, private', pragma: 'no-cache', expires: '0' };
     // Clean storefront URLs & HTML documents: serve stale instantly, revalidate in bg for 1 day.
-    const cleanStoreUrls = ['/', '/multiple', '/affiliate', '/checkout', '/cart-checkout', '/success',
+    const cleanStoreUrls = ['/', '/multiple', '/affiliate', '/portfolio', '/checkout', '/cart-checkout', '/success',
                             '/payment-failed', '/product-details', '/affiliate-details', '/owner'];
     if (cleanStoreUrls.indexOf(lower) >= 0 || lower.endsWith('.html') || lower.endsWith('.htm') ||
         ct.indexOf('text/html') >= 0) {
@@ -4538,10 +4563,11 @@ async function safeAssetsFetch(requestOrUrl, env, pathname) {
 // =========================================================
 const R2_ALLOWED_TYPES = new Set([
     'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
-    'image/gif', 'image/svg+xml', 'image/avif', 'image/bmp'
+    'image/gif', 'image/svg+xml', 'image/avif', 'image/bmp',
+    'application/pdf'
 ]);
 
-const R2_MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const R2_MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const R2_IMAGE_FOLDERS = {
     product: 'products',
@@ -4549,6 +4575,7 @@ const R2_IMAGE_FOLDERS = {
     testimonial: 'testimonials',
     gallery: 'gallery',
     seo: 'seo',
+    resume: 'resumes',
     general: 'general'
 };
 
@@ -4567,6 +4594,7 @@ function detectImageFolderFromKey(configKey) {
     if (key.includes('testimonial') || key.includes('review')) return R2_IMAGE_FOLDERS.testimonial;
     if (key.includes('gallery') || key.includes('social_proof')) return R2_IMAGE_FOLDERS.gallery;
     if (key.includes('seo') || key.includes('socialimage') || key.includes('og')) return R2_IMAGE_FOLDERS.seo;
+    if (key.includes('resume') || key.includes('cv')) return R2_IMAGE_FOLDERS.resume;
     if (key.includes('product') || key.includes('image')) return R2_IMAGE_FOLDERS.product;
     return R2_IMAGE_FOLDERS.general;
 }
@@ -4625,11 +4653,19 @@ async function handleOwnerImageUpload(request, env) {
     const originalName = String(file.name || 'image').slice(0, 200);
     const mimeType = String(file.type || '').toLowerCase();
     const size = Number(file.size || 0);
+    const configKey = String(form.get('configKey') || '').toLowerCase();
+    const isResumeUpload = configKey.includes('resume') || configKey.includes('cv');
 
     if (!R2_ALLOWED_TYPES.has(mimeType)) {
         return jsonResponse({
             success: false,
-            error: 'Unsupported image type. Allowed: JPG, PNG, WebP, GIF, SVG, AVIF, BMP.'
+            error: 'Unsupported file type. Allowed images plus PDF resumes.'
+        }, 415);
+    }
+    if (mimeType === 'application/pdf' && (!isResumeUpload || !/\.pdf$/i.test(originalName))) {
+        return jsonResponse({
+            success: false,
+            error: 'PDF uploads are only supported for a resume and must use the .pdf extension.'
         }, 415);
     }
 
@@ -4640,10 +4676,10 @@ async function handleOwnerImageUpload(request, env) {
         }, 400);
     }
 
-    if (size > R2_MAX_IMAGE_BYTES) {
+    if (size > R2_MAX_UPLOAD_BYTES) {
         return jsonResponse({
             success: false,
-            error: 'Image too large. Maximum size is 10 MB.'
+            error: 'File too large. Maximum size is 10 MB.'
         }, 413);
     }
 
@@ -4672,6 +4708,7 @@ async function handleOwnerImageUpload(request, env) {
         'image/svg+xml': 'svg',
         'image/avif': 'avif',
         'image/bmp': 'bmp'
+        , 'application/pdf': 'pdf'
     };
     const ext = extMap[mimeType] || 'bin';
     const objectKey = folder + '/' + sanitizeR2KeyPart(stem) + '-' + timestamp + '-' + random + '.' + ext;
